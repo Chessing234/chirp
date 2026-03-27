@@ -1,0 +1,144 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: transparent;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Focus styles */
+*:focus {
+  outline: none;
+}
+
+*:focus-visible {
+  outline: 2px solid rgba(74, 159, 110, 0.5);
+  outline-offset: 2px;
+}
+
+/* Input placeholder */
+::placeholder {
+  color: #666;
+  opacity: 1;
+}
+
+/* Selection */
+::selection {
+  background: rgba(74, 159, 110, 0.3);
+  color: #eaeaea;
+}
+
+/* Drag region for window */
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Animation classes */
+.animate-in {
+  animation: fadeScaleIn 200ms ease-out forwards;
+}
+
+.animate-out {
+  animation: fadeScaleOut 150ms ease-in forwards;
+}
+
+@keyframes fadeScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes fadeScaleOut {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+/* Task item transitions */
+.task-item {
+  transition: all 150ms ease-out;
+}
+
+.task-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.task-item.selected {
+  background: rgba(74, 159, 110, 0.1);
+}
+
+/* Checkbox animation */
+.checkbox-animated {
+  transition: all 150ms ease-out;
+}
+
+.checkbox-animated.checked {
+  background: #4a9f6e;
+  border-color: #4a9f6e;
+}
+
+/* Subtle glow effect */
+.glow-subtle {
+  box-shadow: 0 0 30px rgba(74, 159, 110, 0.08);
+}
+
+/* Glass effect - fully opaque to avoid gray edges */
+.glass {
+  background: #111111;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* Keyboard shortcut badge */
+.kbd {
+  @apply inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-mono bg-ping-elevated border border-ping-border rounded;
+}
