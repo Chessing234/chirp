@@ -8,31 +8,23 @@ A minimalist task manager combining the speed of a command palette with the powe
 
 ## Features
 
-- **⚡ Global Shortcut** - Summon anywhere with `Cmd/Ctrl + Shift + Space`
-- **🎯 Quick Add** - Natural language task entry: "Call mom tomorrow 5pm ping 2h"
-- **🔔 Smart Pings** - Recurring reminders that keep tasks top of mind
-- **📋 Multiple Lists** - Organize tasks into focused lists
-- **🔍 Fuzzy Search** - Find any task instantly
-- **⌨️ Keyboard-First** - Navigate entirely with keyboard
-
-## Natural Language Examples
-
-```
-Finish essay tomorrow 5pm ping every 2h
-Call Rahul ping 30m
-Review PR at 3pm
-Submit report next monday
-Buy groceries in 2h
-```
+- **Global Shortcut** - Summon anywhere with `Cmd + E`
+- **Quick Add** - Natural language task entry: "Call mom tomorrow 5pm ping 2h"
+- **Smart Pings** - Recurring reminders that keep tasks top of mind
+- **Multiple Lists** - Organize tasks into color-coded lists
+- **Fuzzy Search** - Find any task instantly
+- **Keyboard-First** - Navigate entirely with keyboard
+- **System Tray** - Always accessible from your menu bar
+- **Launch at Login** - Always ready when you need it
 
 ## Keyboard Shortcuts
 
 | Action | Shortcut |
 |--------|----------|
-| Open PingPal | `Cmd/Ctrl + Shift + Space` |
+| Open PingPal | `Cmd + E` |
 | Close | `Esc` |
 | Navigate tasks | `↑` `↓` |
-| Toggle task | `Cmd/Ctrl + Enter` |
+| Toggle task | `Cmd + Enter` |
 | Add task | `Enter` |
 | Switch list | `Tab` |
 
@@ -43,104 +35,76 @@ Type in the input field:
 - `/new <name>` - Create new list
 - `/settings` - Open settings
 - `/clear` - Clear completed tasks
-- `/quit` - Quit application
 
 ## Installation
 
-### Prerequisites
+### From Release
 
-- Node.js 18+ (20+ recommended)
-- npm 9+
+1. Download `PingPal-v1.0.0-macos-arm64.zip` from [Releases](https://github.com/Chessing234/PingPal/releases)
+2. Extract the zip file
+3. Move `PingPal.app` to `/Applications`
+4. Run in Terminal to remove quarantine:
+   ```bash
+   xattr -cr /Applications/PingPal.app
+   ```
+5. Open PingPal and grant Accessibility permissions when prompted
 
-### Setup
+### Build from Source
+
+Prerequisites:
+- Node.js 18+
+- Rust (install via [rustup](https://rustup.rs))
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/pingpal.git
-cd pingpal
+git clone https://github.com/Chessing234/PingPal.git
+cd PingPal
 
-# Install dependencies (automatically rebuilds native modules for Electron)
+# Install dependencies
 npm install
 
-# Build the application
-npm run build
+# Run in development mode
+cargo tauri dev
 
-# Run the built application
-npm run start
+# Build for production
+cargo tauri build
 ```
 
-### Development Mode
+## Tech Stack
 
-```bash
-# Terminal 1: Start Vite dev server for hot reload
-npm run dev:renderer
-
-# Terminal 2: Build and start Electron (watches for changes)
-npm run dev:main
-
-# Or run both concurrently
-npm run dev
-```
-
-### Build for Production
-
-```bash
-# Build the application
-npm run build
-
-# Package for your platform
-npm run package          # All platforms
-npm run package:mac      # macOS only (.dmg, .zip)
-npm run package:win      # Windows only (.exe)
-npm run package:linux    # Linux only (.AppImage, .deb)
-```
-
-### Troubleshooting
-
-If you encounter native module issues:
-```bash
-npm run rebuild
-```
+- **Framework**: Tauri 2 (Rust)
+- **UI**: React + TypeScript
+- **Styling**: TailwindCSS
+- **State**: Zustand
+- **Database**: SQLite (rusqlite)
+- **Build**: Vite + Tauri
 
 ## Project Structure
 
 ```
 /src
-  /main                 # Electron main process
-    index.ts           # App entry, window management, shortcuts
-    database.ts        # SQLite database operations
-    reminder-engine.ts # Background reminder scheduler
-    preload.ts         # IPC bridge for renderer
-
-  /renderer            # React application
+  /renderer            # React frontend
     /components
       CommandPalette.tsx   # Main UI component
       TaskItem.tsx         # Individual task display
       ListSelector.tsx     # List switching dropdown
-      SettingsPanel.tsx    # App settings
     /hooks
       useKeyboard.ts       # Keyboard navigation
-      useFuzzySearch.ts    # Search functionality
     /lib
       store.ts             # Zustand state management
       parser.ts            # Natural language parsing
-    /styles
-      index.css            # Tailwind + custom styles
+      tauri-api.ts         # Tauri IPC bindings
 
-  /shared
-    types.ts            # TypeScript interfaces
-
-/resources              # App icons and assets
+/src-tauri             # Rust backend
+  /src
+    lib.rs             # App logic, database, shortcuts
+    main.rs            # Entry point
 ```
 
-## Tech Stack
+## Data Storage
 
-- **Framework**: Electron
-- **UI**: React + TypeScript
-- **Styling**: TailwindCSS
-- **State**: Zustand
-- **Database**: SQLite (better-sqlite3)
-- **Build**: Vite + electron-builder
+All data is stored locally in SQLite:
+- **macOS**: `~/Library/Application Support/com.pingpal.app/pingpal.db`
 
 ## Design Philosophy
 
@@ -150,20 +114,10 @@ npm run rebuild
 - **Smooth animations** - 150-250ms transitions
 - **Keyboard-first** - Speed over clicks
 
-## Data Storage
+## Requirements
 
-All data is stored locally in SQLite:
-- **macOS**: `~/Library/Application Support/pingpal/pingpal.db`
-- **Windows**: `%APPDATA%/pingpal/pingpal.db`
-- **Linux**: `~/.config/pingpal/pingpal.db`
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing`)
-5. Open a Pull Request
+- macOS 10.15 (Catalina) or later
+- Apple Silicon (arm64)
 
 ## License
 
@@ -171,4 +125,4 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-Built with focus and intention.
+Built with Rust and intention.
