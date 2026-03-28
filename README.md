@@ -43,11 +43,14 @@ Type in the input field:
 1. Download `PingPal-v1.0.0-macos-arm64.zip` from [Releases](https://github.com/Chessing234/PingPal/releases)
 2. Extract the zip file
 3. Move `PingPal.app` to `/Applications`
-4. Run in Terminal to remove quarantine:
-   ```bash
-   xattr -cr /Applications/PingPal.app
-   ```
-5. Open PingPal and grant Accessibility permissions when prompted
+4. **Bypass macOS Gatekeeper** (required for unsigned apps):
+   - Double-click `PingPal.app`
+   - When you see "Apple could not verify", click **Done** (not Move to Trash)
+   - Open **System Settings → Privacy & Security**
+   - Scroll down to the Security section
+   - Click **"Open Anyway"** next to PingPal
+   - Click **Open** in the confirmation dialog
+5. Grant Accessibility permissions when prompted
 
 ### Build from Source
 
