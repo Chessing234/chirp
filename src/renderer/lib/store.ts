@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { List, Task, AppSettings, ListReminder } from '../../shared/types';
-import { getApi, isTauri } from './tauri-api';
+import { getApi } from './tauri-api';
 
 interface AppState {
   // Data
@@ -52,7 +52,7 @@ interface AppState {
   refreshTasks: () => Promise<void>;
 }
 
-// Get the API (works with both Tauri and Electron)
+// Get the Tauri API
 const api = getApi();
 
 export const useStore = create<AppState>((set, get) => ({
@@ -61,7 +61,7 @@ export const useStore = create<AppState>((set, get) => ({
   tasks: [],
   settings: {
     launchOnStartup: false,
-    globalShortcut: 'CommandOrControl+Shift+P',
+    globalShortcut: 'Command+E',
     soundEnabled: true,
     theme: 'dark',
   },
@@ -202,21 +202,3 @@ export const useStore = create<AppState>((set, get) => ({
   },
 }));
 
-// Subscribe to updates from main process (for Electron compatibility)
-if (typeof window !== 'undefined' && !isTauri()) {
-  const electronApi = (window as { pingpal?: typeof api }).pingpal;
-  if (electronApi) {
-    electronApi.on('task:updated', () => {
-      useStore.getState().refreshTasks();
-    });
-
-    electronApi.on('list:updated', () => {
-      useStore.getState().refreshLists();
-    });
-
-    electronApi.on('navigate:list', (listId) => {
-      useStore.getState().setSelectedListId(listId as string);
-      useStore.getState().setView('command');
-    });
-  }
-}

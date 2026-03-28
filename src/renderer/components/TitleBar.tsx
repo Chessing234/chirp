@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getApi, isTauri } from '../lib/tauri-api';
+import { getApi } from '../lib/tauri-api';
 
 const api = getApi();
 
@@ -11,17 +11,6 @@ export function TitleBar() {
     api.app.getMode().then(setMode).catch(() => {
       // Default to full mode if unable to get mode
     });
-
-    // Listen for mode changes (Electron only)
-    if (!isTauri()) {
-      const electronApi = (window as { pingpal?: typeof api }).pingpal;
-      if (electronApi) {
-        const unsubscribe = electronApi.on('mode:changed', (newMode) => {
-          setMode(newMode as 'overlay' | 'full');
-        });
-        return unsubscribe;
-      }
-    }
   }, []);
 
   const handleClose = () => {
