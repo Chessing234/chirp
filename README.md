@@ -2,9 +2,9 @@
 
 **Keyboard-first, ultra-fast desktop task companion.**
 
-A minimalist task manager inspired by Nothing OS design language, combining the speed of a command palette with the power of recurring reminders.
+A minimalist task manager combining the speed of a command palette with the power of recurring reminders.
 
-![PingPal](resources/icon.svg)
+<img src="resources/icon.svg" alt="PingPal" width="120">
 
 ## Features
 
@@ -143,8 +143,6 @@ npm run rebuild
 - **Build**: Vite + electron-builder
 
 ## Design Philosophy
-
-PingPal follows the Nothing OS design language:
 
 - **Dark theme only** - Easy on the eyes
 - **Monochrome + accent** - Minimal visual noise
