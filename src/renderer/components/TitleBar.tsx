@@ -27,7 +27,7 @@ export function TitleBar() {
       <div className="flex items-center justify-between px-4 py-2 drag-region" data-tauri-drag-region>
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded-full bg-ping-accent" />
-          <span className="text-xs font-medium text-ping-muted">PingPal</span>
+          <span className="text-xs font-medium text-ping-muted">Chirp</span>
         </div>
         <div className="flex items-center gap-1 no-drag">
           <span className="text-xs text-ping-muted/60 mr-2">Press Esc to close</span>
@@ -78,7 +78,7 @@ export function TitleBar() {
 
       <div className="flex items-center gap-2">
         <div className="w-2 h-2 rounded-full bg-ping-accent animate-pulse" />
-        <span className="text-sm font-semibold text-ping-text">PingPal</span>
+        <span className="text-sm font-semibold text-ping-text">Chirp</span>
       </div>
 
       <div className="flex items-center gap-2 text-xs text-ping-muted no-drag">

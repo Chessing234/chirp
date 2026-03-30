@@ -20,10 +20,10 @@ impl Database {
     fn new() -> Result<Self, rusqlite::Error> {
         let data_dir = dirs::data_dir()
             .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join("PingPal");
+            .join("Chirp");
         std::fs::create_dir_all(&data_dir).ok();
 
-        let db_path = data_dir.join("pingpal.db");
+        let db_path = data_dir.join("chirp.db");
         let conn = Connection::open(db_path)?;
 
         // Create tables
@@ -442,17 +442,17 @@ fn setup_app_menu(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let hide_item = MenuItem::with_id(
         app,
         "hide_app",
-        "Hide PingPal",
+        "Hide Chirp",
         true,
         Some("CmdOrCtrl+Q"),
     )?;
 
-    let about = PredefinedMenuItem::about(app, Some("About PingPal"), None)?;
+    let about = PredefinedMenuItem::about(app, Some("About Chirp"), None)?;
     let separator = PredefinedMenuItem::separator(app)?;
 
     let app_menu = Submenu::with_items(
         app,
-        "PingPal",
+        "Chirp",
         true,
         &[&about, &separator, &hide_item],
     )?;
@@ -473,13 +473,13 @@ fn setup_app_menu(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    let quit = MenuItem::with_id(app, "quit", "Quit PingPal", true, None::<&str>)?;
-    let show = MenuItem::with_id(app, "show", "Show PingPal", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit Chirp", true, None::<&str>)?;
+    let show = MenuItem::with_id(app, "show", "Show Chirp", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show, &quit])?;
 
     let _tray = TrayIconBuilder::new()
         .menu(&menu)
-        .tooltip("PingPal - Click to show, right-click for menu")
+        .tooltip("Chirp - Click to show, right-click for menu")
         .icon_as_template(true)
         .on_menu_event(|app, event| {
             match event.id.as_ref() {

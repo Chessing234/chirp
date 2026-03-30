@@ -4,7 +4,7 @@ const fs = require('fs');
 
 const RESOURCES_DIR = path.join(__dirname, '..', 'resources');
 
-// Modern PingPal icon - smaller centered bell with black background
+// Modern Chirp icon - smaller centered bell with black background
 const createIconSvg = (size) => `
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}">
   <defs>
@@ -95,7 +95,7 @@ const createTrayIconSvg = (size) => `
 `;
 
 async function generateIcons() {
-  console.log('Generating PingPal icons...');
+  console.log('Generating Chirp icons...');
 
   // Create resources directory if needed
   if (!fs.existsSync(RESOURCES_DIR)) {

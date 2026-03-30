@@ -1,10 +1,10 @@
-# PingPal
+# Chirp
 
 **Keyboard-first, ultra-fast desktop task companion.**
 
 A minimalist task manager combining the speed of a command palette with the power of recurring reminders.
 
-<img src="resources/icon.svg" alt="PingPal" width="120">
+<img src="resources/icon.svg" alt="Chirp" width="120">
 
 ## Features
 
@@ -21,7 +21,7 @@ A minimalist task manager combining the speed of a command palette with the powe
 
 | Action | Shortcut |
 |--------|----------|
-| Open PingPal | `Cmd + E` |
+| Open Chirp | `Cmd + E` |
 | Close | `Esc` |
 | Navigate tasks | `↑` `↓` |
 | Toggle task | `Cmd + Enter` |
@@ -40,15 +40,15 @@ Type in the input field:
 
 ### From Release
 
-1. Download `PingPal-v1.0.0-macos-arm64.zip` from [Releases](https://github.com/Chessing234/PingPal/releases)
+1. Download `Chirp-v1.0.0-macos-arm64.zip` from [Releases](https://github.com/Chessing234/Chirp/releases)
 2. Extract the zip file
-3. Move `PingPal.app` to `/Applications`
+3. Move `Chirp.app` to `/Applications`
 4. **Bypass macOS Gatekeeper** (required for unsigned apps):
-   - Double-click `PingPal.app`
+   - Double-click `Chirp.app`
    - When you see "Apple could not verify", click **Done** (not Move to Trash)
    - Open **System Settings → Privacy & Security**
    - Scroll down to the Security section
-   - Click **"Open Anyway"** next to PingPal
+   - Click **"Open Anyway"** next to Chirp
    - Click **Open** in the confirmation dialog
 5. Grant Accessibility permissions when prompted
 
@@ -60,8 +60,8 @@ Prerequisites:
 
 ```bash
 # Clone the repository
-git clone https://github.com/Chessing234/PingPal.git
-cd PingPal
+git clone https://github.com/Chessing234/Chirp.git
+cd Chirp
 
 # Install dependencies
 npm install
@@ -107,7 +107,7 @@ cargo tauri build
 ## Data Storage
 
 All data is stored locally in SQLite:
-- **macOS**: `~/Library/Application Support/com.pingpal.app/pingpal.db`
+- **macOS**: `~/Library/Application Support/Chirp/chirp.db`
 
 ## Design Philosophy
 

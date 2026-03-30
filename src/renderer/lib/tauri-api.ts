@@ -13,7 +13,16 @@ export const tauriApi = {
   lists: {
     getAll: async (): Promise<List[]> => {
       try {
-        return await invoke('get_all_lists');
+        const lists: List[] = await invoke('get_all_lists');
+        // Parse reminder JSON strings from the Rust backend into objects
+        return lists.map((list) => ({
+          ...list,
+          reminder: list.reminder
+            ? (typeof list.reminder === 'string'
+              ? JSON.parse(list.reminder as string)
+              : list.reminder)
+            : undefined,
+        }));
       } catch (e) {
         console.error('Failed to get lists:', e);
         return [];
@@ -29,7 +38,7 @@ export const tauriApi = {
     },
     update: async (id: string, updates: { name?: string; color?: string; reminder?: ListReminder | null }): Promise<List> => {
       try {
-        return await invoke('update_list', {
+        const list: List = await invoke('update_list', {
           id,
           updates: {
             name: updates.name,
@@ -37,6 +46,15 @@ export const tauriApi = {
             reminder: updates.reminder ? JSON.stringify(updates.reminder) : undefined,
           }
         });
+        // Parse reminder JSON string from Rust backend into object
+        return {
+          ...list,
+          reminder: list.reminder
+            ? (typeof list.reminder === 'string'
+              ? JSON.parse(list.reminder as string)
+              : list.reminder)
+            : undefined,
+        };
       } catch (e) {
         console.error('Failed to update list:', e);
         throw e;

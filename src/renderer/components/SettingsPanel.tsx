@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useStore } from '../lib/store';
+import { getApi } from '../lib/tauri-api';
 
 interface SettingsPanelProps {
   onBack: () => void;
@@ -15,7 +16,7 @@ export function SettingsPanel({ onBack }: SettingsPanelProps) {
 
   const updateSetting = async (key: string, value: unknown) => {
     setLocalSettings((prev) => ({ ...prev, [key]: value }));
-    const newSettings = await window.pingpal.app.setSettings(key, value);
+    const newSettings = await getApi().app.setSettings(key, value);
     setSettings(newSettings);
   };
 
@@ -63,7 +64,7 @@ export function SettingsPanel({ onBack }: SettingsPanelProps) {
           <div>
             <div className="text-sm font-medium text-ping-text">Launch on startup</div>
             <div className="text-xs text-ping-muted mt-0.5">
-              Start PingPal when you log in
+              Start Chirp when you log in
             </div>
           </div>
           <button
@@ -112,7 +113,7 @@ export function SettingsPanel({ onBack }: SettingsPanelProps) {
         <div>
           <div className="text-sm font-medium text-ping-text">Global shortcut</div>
           <div className="text-xs text-ping-muted mt-0.5 mb-2">
-            Press to summon PingPal from anywhere
+            Press to summon Chirp from anywhere
           </div>
           <div className="flex items-center gap-2">
             <div className="flex-1 px-3 py-2 bg-ping-elevated border border-ping-border rounded-lg">
@@ -128,7 +129,7 @@ export function SettingsPanel({ onBack }: SettingsPanelProps) {
           <div className="text-sm font-medium text-ping-text mb-3">Keyboard shortcuts</div>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-ping-muted">Open PingPal</span>
+              <span className="text-ping-muted">Open Chirp</span>
               <span className="kbd">⌘⇧P</span>
             </div>
             <div className="flex justify-between">
@@ -157,7 +158,7 @@ export function SettingsPanel({ onBack }: SettingsPanelProps) {
         {/* Version */}
         <div className="pt-4 border-t border-ping-border/50 text-center">
           <div className="text-xs text-ping-muted">
-            PingPal v1.0.0
+            Chirp v1.0.0
           </div>
           <div className="text-xs text-ping-muted/50 mt-1">
             Keyboard-first task companion

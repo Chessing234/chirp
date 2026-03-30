@@ -1,5 +1,6 @@
 import { useEffect, useCallback } from 'react';
 import { useStore } from '../lib/store';
+import { getApi } from '../lib/tauri-api';
 
 interface KeyboardOptions {
   onEscape?: () => void;
@@ -98,7 +99,7 @@ export function useKeyboard(options: KeyboardOptions = {}) {
 
 export function useEscapeToHide() {
   const handleEscape = useCallback(() => {
-    window.pingpal?.app.hide();
+    getApi().app.hide();
   }, []);
 
   useKeyboard({

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useStore } from '../lib/store';
+import { getApi } from '../lib/tauri-api';
 import { parseTaskInput, formatDueDate, formatPingInterval } from '../lib/parser';
 import { useFuzzySearch } from '../hooks/useFuzzySearch';
 import { useKeyboard } from '../hooks/useKeyboard';
@@ -86,7 +87,7 @@ export function CommandPalette() {
           break;
         case 'quit':
         case 'exit':
-          window.pingpal.app.quit();
+          getApi().app.quit();
           break;
       }
     },

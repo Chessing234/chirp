@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "PingPal",
+  "productName": "Chirp",
   "version": "1.0.0",
-  "identifier": "com.pingpal.app",
+  "identifier": "com.chirp.app",
   "build": {
     "frontendDist": "../dist/renderer",
     "devUrl": "http://localhost:5173",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "PingPal",
+        "title": "Chirp",
         "width": 680,
         "height": 600,
         "minWidth": 500,

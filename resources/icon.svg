@@ -10,23 +10,28 @@
   <circle cx="256" cy="256" r="240" fill="#0a0a0a"/>
   <circle cx="256" cy="256" r="220" fill="url(#grad)" opacity="0.1"/>
 
-  <!-- Bell icon -->
-  <path d="M256 80c-66.274 0-120 53.726-120 120v60l-30 30v30h300v-30l-30-30v-60c0-66.274-53.726-120-120-120z"
-        fill="none"
-        stroke="#4a9f6e"
-        stroke-width="24"
-        stroke-linecap="round"
-        stroke-linejoin="round"/>
+  <!-- Bird body -->
+  <ellipse cx="240" cy="280" rx="100" ry="80" fill="#4a9f6e"/>
 
-  <!-- Bell bottom -->
-  <path d="M216 350c0 22.091 17.909 40 40 40s40-17.909 40-40"
-        fill="none"
-        stroke="#4a9f6e"
-        stroke-width="24"
-        stroke-linecap="round"/>
+  <!-- Bird head -->
+  <circle cx="310" cy="210" r="60" fill="#4a9f6e"/>
 
-  <!-- Ping circles -->
-  <circle cx="380" cy="140" r="20" fill="#4a9f6e"/>
-  <circle cx="380" cy="140" r="35" fill="none" stroke="#4a9f6e" stroke-width="8" opacity="0.6"/>
-  <circle cx="380" cy="140" r="55" fill="none" stroke="#4a9f6e" stroke-width="6" opacity="0.3"/>
+  <!-- Eye -->
+  <circle cx="330" cy="200" r="14" fill="#0a0a0a"/>
+  <circle cx="334" cy="196" r="5" fill="#ffffff"/>
+
+  <!-- Beak -->
+  <path d="M370 210 L410 200 L370 220 Z" fill="#f0a030"/>
+
+  <!-- Wing -->
+  <path d="M180 260 Q140 220 160 180 Q200 220 240 240 Z" fill="#3d8a5a"/>
+
+  <!-- Tail feathers -->
+  <path d="M140 300 Q100 280 90 250" fill="none" stroke="#3d8a5a" stroke-width="16" stroke-linecap="round"/>
+  <path d="M150 310 Q110 300 95 280" fill="none" stroke="#4a9f6e" stroke-width="12" stroke-linecap="round"/>
+
+  <!-- Sound waves (chirp!) -->
+  <path d="M400 180 Q420 170 410 155" fill="none" stroke="#4a9f6e" stroke-width="8" stroke-linecap="round" opacity="0.8"/>
+  <path d="M405 200 Q430 190 425 170" fill="none" stroke="#4a9f6e" stroke-width="6" stroke-linecap="round" opacity="0.5"/>
+  <path d="M408 220 Q440 210 438 188" fill="none" stroke="#4a9f6e" stroke-width="4" stroke-linecap="round" opacity="0.3"/>
 </svg>
