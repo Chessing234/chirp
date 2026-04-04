@@ -1,5 +1,6 @@
 mod app;
 mod db;
+mod import;
 mod parser;
 mod ui;
 
@@ -15,6 +16,36 @@ use std::panic;
 use std::time::Duration;
 
 fn main() -> io::Result<()> {
+    let args: Vec<String> = std::env::args().collect();
+
+    // Handle --import flag
+    if let Some(pos) = args.iter().position(|a| a == "--import") {
+        let path = args.get(pos + 1).unwrap_or_else(|| {
+            eprintln!("Usage: chirp --import <file.json|file.csv>");
+            std::process::exit(1);
+        });
+        match import::import_file(path) {
+            Ok(count) => {
+                println!("Imported {} tasks from {}", count, path);
+                return Ok(());
+            }
+            Err(e) => {
+                eprintln!("Import failed: {}", e);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    if args.iter().any(|a| a == "--help" || a == "-h") {
+        println!("chirp - keyboard-first task manager for the terminal\n");
+        println!("Usage:");
+        println!("  chirp                  Launch the TUI");
+        println!("  chirp --import <file>  Import tasks from JSON or CSV");
+        println!("\nJSON format: [{{\"content\": \"task\", \"list\": \"Inbox\", \"priority\": 1, \"due\": \"2025-01-15T09:00:00\", \"ping\": \"30m\", \"recurrence\": \"daily\"}}]");
+        println!("CSV format:  content,list,priority,due,ping,recurrence");
+        return Ok(());
+    }
+
     // Install panic hook to restore terminal on crash
     let original_hook = panic::take_hook();
     panic::set_hook(Box::new(move |panic_info| {
@@ -48,14 +79,11 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<
 
         if event::poll(Duration::from_millis(50))? {
             if let Event::Key(key) = event::read()? {
-                // Ignore key release events (crossterm sends both press and release)
                 if key.kind != event::KeyEventKind::Press {
                     continue;
                 }
 
-                // Clear status message on any key
                 app.status_message = None;
-
                 handle_key(app, key);
 
                 if app.should_quit {
@@ -67,7 +95,6 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<
 }
 
 fn handle_key(app: &mut App, key: KeyEvent) {
-    // Ctrl+C always quits
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
         app.should_quit = true;
         return;
@@ -85,9 +112,7 @@ fn handle_key(app: &mut App, key: KeyEvent) {
             }
             _ => app.view = View::Tasks,
         },
-        View::Help => {
-            app.view = View::Tasks;
-        }
+        View::Help => { app.view = View::Tasks; }
         View::NewList | View::RenameList => handle_dialog_input(app, key),
         View::Tasks => {
             if app.input_mode == InputMode::Insert {
@@ -113,15 +138,22 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
         KeyCode::Char('l') | KeyCode::Right | KeyCode::Tab => app.next_list(),
         KeyCode::BackTab => app.prev_list(),
 
+        // Reorder tasks (Shift+J / Shift+K)
+        KeyCode::Char('J') => app.move_task_down(),
+        KeyCode::Char('K') => app.move_task_up(),
+
         // Task actions
         KeyCode::Char('i') | KeyCode::Char('a') => {
             app.input_mode = InputMode::Insert;
             app.search_mode = false;
+            app.editing_task_id = None;
             app.input.clear();
             app.cursor_pos = 0;
         }
+        KeyCode::Char('e') => app.start_edit(),
         KeyCode::Char(' ') | KeyCode::Enter => app.toggle_selected_task(),
         KeyCode::Char('x') => app.toggle_selected_task(),
+        KeyCode::Char('s') => app.snooze_selected(),
         KeyCode::Char('d') => {
             if app.selected_task_data().is_some() {
                 app.view = View::ConfirmDeleteTask;
@@ -153,9 +185,7 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
                 app.input_mode = InputMode::Insert;
             }
         }
-        KeyCode::Char('D') => {
-            app.view = View::ConfirmDeleteList;
-        }
+        KeyCode::Char('D') => { app.view = View::ConfirmDeleteList; }
 
         _ => {}
     }
@@ -166,6 +196,8 @@ fn handle_insert_mode(app: &mut App, key: KeyEvent) {
         (_, KeyCode::Esc) => {
             if app.search_mode {
                 app.cancel_search();
+            } else if app.editing_task_id.is_some() {
+                app.cancel_edit();
             } else {
                 app.input_mode = InputMode::Normal;
                 app.input.clear();
@@ -174,7 +206,6 @@ fn handle_insert_mode(app: &mut App, key: KeyEvent) {
         }
         (_, KeyCode::Enter) => {
             app.submit_input();
-            // After submitting a task, go back to normal mode
             if !app.search_mode {
                 app.input_mode = InputMode::Normal;
             }
@@ -193,7 +224,6 @@ fn handle_insert_mode(app: &mut App, key: KeyEvent) {
         (KeyModifiers::CONTROL, KeyCode::Char('w')) => app.delete_word_before_cursor(),
         (_, KeyCode::Home) => app.cursor_pos = 0,
         (_, KeyCode::End) => app.cursor_pos = app.input.len(),
-        // Navigate search results without leaving insert mode
         (KeyModifiers::CONTROL, KeyCode::Char('n')) | (_, KeyCode::Down) if app.search_mode => {
             app.move_selection_down();
         }

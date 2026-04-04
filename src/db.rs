@@ -13,6 +13,7 @@ pub struct List {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Task {
     pub id: String,
     pub content: String,
@@ -20,6 +21,9 @@ pub struct Task {
     pub due_at: Option<i64>,
     pub ping_interval: Option<i64>,
     pub last_ping_at: Option<i64>,
+    pub priority: Option<u8>,
+    pub recurrence: Option<String>,
+    pub sort_order: i64,
 }
 
 impl Database {
@@ -63,6 +67,15 @@ impl Database {
             [],
         )?;
 
+        // Migrations for new columns (safe to re-run)
+        conn.execute("ALTER TABLE tasks ADD COLUMN priority INTEGER", []).ok();
+        conn.execute("ALTER TABLE tasks ADD COLUMN recurrence TEXT", []).ok();
+        conn.execute("ALTER TABLE tasks ADD COLUMN sort_order INTEGER", []).ok();
+        conn.execute(
+            "UPDATE tasks SET sort_order = -(created_at / 1000) WHERE sort_order IS NULL",
+            [],
+        ).ok();
+
         let db = Self { conn };
         db.ensure_default_list();
         Ok(db)
@@ -86,7 +99,25 @@ impl Database {
         }
     }
 
-    // Lists
+    fn read_task(row: &rusqlite::Row) -> rusqlite::Result<Task> {
+        Ok(Task {
+            id: row.get(0)?,
+            content: row.get(1)?,
+            completed: row.get::<_, i32>(2)? != 0,
+            due_at: row.get(3)?,
+            ping_interval: row.get(4)?,
+            last_ping_at: row.get(5)?,
+            priority: row.get::<_, Option<i32>>(6)?.map(|p| p as u8),
+            recurrence: row.get(7)?,
+            sort_order: row.get::<_, Option<i64>>(8)?.unwrap_or(0),
+        })
+    }
+
+    const TASK_COLS: &'static str =
+        "id, content, completed, due_at, ping_interval, last_ping_at, priority, recurrence, sort_order";
+
+    // === Lists ===
+
     pub fn get_all_lists(&self) -> Vec<List> {
         let mut stmt = self
             .conn
@@ -114,9 +145,18 @@ impl Database {
             )
             .unwrap();
 
-        List {
-            id,
-            name: name.to_string(),
+        List { id, name: name.to_string() }
+    }
+
+    pub fn find_or_create_list(&self, name: &str) -> String {
+        if let Ok(id) = self.conn.query_row(
+            "SELECT id FROM lists WHERE name = ?1 COLLATE NOCASE",
+            [name],
+            |row| row.get::<_, String>(0),
+        ) {
+            id
+        } else {
+            self.create_list(name).id
         }
     }
 
@@ -131,37 +171,33 @@ impl Database {
     }
 
     pub fn delete_list(&self, id: &str) {
-        self.conn
-            .execute("DELETE FROM tasks WHERE list_id = ?1", [id])
-            .ok();
-        self.conn
-            .execute("DELETE FROM lists WHERE id = ?1", [id])
-            .ok();
+        self.conn.execute("DELETE FROM tasks WHERE list_id = ?1", [id]).ok();
+        self.conn.execute("DELETE FROM lists WHERE id = ?1", [id]).ok();
     }
 
-    // Tasks
-    pub fn get_tasks_by_list(&self, list_id: &str) -> Vec<Task> {
-        let mut stmt = self
-            .conn
-            .prepare(
-                "SELECT id, content, completed, due_at, ping_interval, last_ping_at
-                 FROM tasks WHERE list_id = ?1 ORDER BY completed ASC, created_at DESC",
-            )
-            .unwrap();
+    // === Tasks ===
 
-        stmt.query_map([list_id], |row| {
-            Ok(Task {
-                id: row.get(0)?,
-                content: row.get(1)?,
-                completed: row.get::<_, i32>(2)? != 0,
-                due_at: row.get(3)?,
-                ping_interval: row.get(4)?,
-                last_ping_at: row.get(5)?,
-            })
-        })
-        .unwrap()
-        .filter_map(|r| r.ok())
-        .collect()
+    fn next_sort_order(&self, list_id: &str) -> i64 {
+        self.conn
+            .query_row(
+                "SELECT COALESCE(MIN(sort_order), 0) - 1 FROM tasks WHERE list_id = ?1 AND completed = 0",
+                [list_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(-1)
+    }
+
+    pub fn get_tasks_by_list(&self, list_id: &str) -> Vec<Task> {
+        let sql = format!(
+            "SELECT {} FROM tasks WHERE list_id = ?1 ORDER BY completed ASC, COALESCE(priority, 4) ASC, sort_order ASC",
+            Self::TASK_COLS
+        );
+        let mut stmt = self.conn.prepare(&sql).unwrap();
+
+        stmt.query_map([list_id], Self::read_task)
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect()
     }
 
     pub fn create_task(
@@ -170,14 +206,18 @@ impl Database {
         content: &str,
         due_at: Option<i64>,
         ping_interval: Option<i64>,
+        priority: Option<u8>,
+        recurrence: Option<&str>,
     ) -> Task {
         let id = Uuid::new_v4().to_string();
         let now = Utc::now().timestamp_millis();
+        let sort_order = self.next_sort_order(list_id);
         self.conn
             .execute(
-                "INSERT INTO tasks (id, list_id, content, completed, due_at, ping_interval, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, 0, ?4, ?5, ?6, ?7)",
-                params![id, list_id, content, due_at, ping_interval, now, now],
+                "INSERT INTO tasks (id, list_id, content, completed, due_at, ping_interval, priority, recurrence, sort_order, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, 0, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                params![id, list_id, content, due_at, ping_interval,
+                        priority.map(|p| p as i32), recurrence, sort_order, now, now],
             )
             .unwrap();
 
@@ -188,7 +228,28 @@ impl Database {
             due_at,
             ping_interval,
             last_ping_at: None,
+            priority,
+            recurrence: recurrence.map(|s| s.to_string()),
+            sort_order,
         }
+    }
+
+    pub fn update_task(
+        &self,
+        id: &str,
+        content: &str,
+        due_at: Option<i64>,
+        ping_interval: Option<i64>,
+        priority: Option<u8>,
+        recurrence: Option<&str>,
+    ) {
+        let now = Utc::now().timestamp_millis();
+        self.conn
+            .execute(
+                "UPDATE tasks SET content=?1, due_at=?2, ping_interval=?3, priority=?4, recurrence=?5, last_ping_at=NULL, updated_at=?6 WHERE id=?7",
+                params![content, due_at, ping_interval, priority.map(|p| p as i32), recurrence, now, id],
+            )
+            .ok();
     }
 
     pub fn toggle_task(&self, id: &str) {
@@ -202,42 +263,49 @@ impl Database {
     }
 
     pub fn delete_task(&self, id: &str) {
+        self.conn.execute("DELETE FROM tasks WHERE id = ?1", [id]).ok();
+    }
+
+    pub fn swap_sort_order(&self, id_a: &str, id_b: &str) {
+        let get = |id: &str| -> i64 {
+            self.conn
+                .query_row("SELECT COALESCE(sort_order,0) FROM tasks WHERE id=?1", [id], |r| r.get(0))
+                .unwrap_or(0)
+        };
+        let (a, b) = (get(id_a), get(id_b));
+        self.conn.execute("UPDATE tasks SET sort_order=?1 WHERE id=?2", params![b, id_a]).ok();
+        self.conn.execute("UPDATE tasks SET sort_order=?1 WHERE id=?2", params![a, id_b]).ok();
+    }
+
+    pub fn snooze_task(&self, id: &str) {
+        let now = Utc::now().timestamp_millis();
         self.conn
-            .execute("DELETE FROM tasks WHERE id = ?1", [id])
+            .execute("UPDATE tasks SET last_ping_at=?1 WHERE id=?2", params![now, id])
             .ok();
     }
 
-    /// Get all incomplete tasks that have a ping_interval set (across all lists).
     pub fn get_pingable_tasks(&self) -> Vec<Task> {
-        let mut stmt = self
-            .conn
-            .prepare(
-                "SELECT id, content, completed, due_at, ping_interval, last_ping_at
-                 FROM tasks WHERE completed = 0 AND ping_interval IS NOT NULL",
-            )
-            .unwrap();
+        let sql = format!(
+            "SELECT {} FROM tasks WHERE completed=0 AND ping_interval IS NOT NULL",
+            Self::TASK_COLS
+        );
+        let mut stmt = self.conn.prepare(&sql).unwrap();
 
-        stmt.query_map([], |row| {
-            Ok(Task {
-                id: row.get(0)?,
-                content: row.get(1)?,
-                completed: row.get::<_, i32>(2)? != 0,
-                due_at: row.get(3)?,
-                ping_interval: row.get(4)?,
-                last_ping_at: row.get(5)?,
-            })
-        })
-        .unwrap()
-        .filter_map(|r| r.ok())
-        .collect()
+        stmt.query_map([], Self::read_task)
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect()
     }
 
     pub fn update_last_ping_at(&self, id: &str, timestamp: i64) {
         self.conn
-            .execute(
-                "UPDATE tasks SET last_ping_at = ?1 WHERE id = ?2",
-                params![timestamp, id],
-            )
+            .execute("UPDATE tasks SET last_ping_at=?1 WHERE id=?2", params![timestamp, id])
             .ok();
+    }
+
+    pub fn get_task_list_id(&self, task_id: &str) -> Option<String> {
+        self.conn
+            .query_row("SELECT list_id FROM tasks WHERE id=?1", [task_id], |r| r.get(0))
+            .ok()
     }
 }
