@@ -1,4 +1,5 @@
 mod app;
+mod daemon;
 mod db;
 mod import;
 mod parser;
@@ -18,32 +19,48 @@ use std::time::Duration;
 fn main() -> io::Result<()> {
     let args: Vec<String> = std::env::args().collect();
 
-    // Handle --import flag
-    if let Some(pos) = args.iter().position(|a| a == "--import") {
-        let path = args.get(pos + 1).unwrap_or_else(|| {
-            eprintln!("Usage: chirp --import <file.json|file.csv>");
-            std::process::exit(1);
-        });
-        match import::import_file(path) {
-            Ok(count) => {
-                println!("Imported {} tasks from {}", count, path);
-                return Ok(());
-            }
-            Err(e) => {
-                eprintln!("Import failed: {}", e);
-                std::process::exit(1);
+    // Subcommand routing
+    let sub = args.get(1).map(|s| s.as_str());
+
+    match sub {
+        Some("daemon") => {
+            let sub2 = args.get(2).map(|s| s.as_str());
+            match sub2 {
+                None | Some("start") => { daemon::run(); return Ok(()); }
+                Some("install") => { daemon::install(); return Ok(()); }
+                Some("uninstall") => { daemon::uninstall(); return Ok(()); }
+                Some("status") => { daemon::status(); return Ok(()); }
+                Some(other) => {
+                    eprintln!("Unknown daemon command: {}", other);
+                    eprintln!("Usage: chirp daemon [start|install|uninstall|status]");
+                    std::process::exit(1);
+                }
             }
         }
-    }
-
-    if args.iter().any(|a| a == "--help" || a == "-h") {
-        println!("chirp - keyboard-first task manager for the terminal\n");
-        println!("Usage:");
-        println!("  chirp                  Launch the TUI");
-        println!("  chirp --import <file>  Import tasks from JSON or CSV");
-        println!("\nJSON format: [{{\"content\": \"task\", \"list\": \"Inbox\", \"priority\": 1, \"due\": \"2025-01-15T09:00:00\", \"ping\": \"30m\", \"recurrence\": \"daily\"}}]");
-        println!("CSV format:  content,list,priority,due,ping,recurrence");
-        return Ok(());
+        Some("--import") => {
+            let path = args.get(2).unwrap_or_else(|| {
+                eprintln!("Usage: chirp --import <file.json|file.csv>");
+                std::process::exit(1);
+            });
+            match import::import_file(path) {
+                Ok(count) => { println!("Imported {} tasks from {}", count, path); return Ok(()); }
+                Err(e) => { eprintln!("Import failed: {}", e); std::process::exit(1); }
+            }
+        }
+        Some("--help") | Some("-h") => {
+            println!("chirp - keyboard-first task manager for the terminal\n");
+            println!("Usage:");
+            println!("  chirp                         Launch the TUI");
+            println!("  chirp daemon                  Run reminder daemon (foreground)");
+            println!("  chirp daemon install           Auto-start daemon on login");
+            println!("  chirp daemon uninstall         Remove auto-start");
+            println!("  chirp daemon status            Check if daemon is running");
+            println!("  chirp --import <file>          Import tasks from JSON or CSV");
+            println!("\nThe daemon sends desktop notifications for ping reminders even");
+            println!("when the TUI is closed. Install it to keep reminders running 24/7.");
+            return Ok(());
+        }
+        _ => {} // fall through to TUI
     }
 
     // Install panic hook to restore terminal on crash
@@ -75,6 +92,7 @@ fn main() -> io::Result<()> {
 fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<()> {
     loop {
         terminal.draw(|f| ui::draw(f, app))?;
+        app.check_daemon_status();
         app.check_pings();
 
         if event::poll(Duration::from_millis(50))? {

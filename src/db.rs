@@ -1,6 +1,13 @@
 use chrono::Utc;
 use rusqlite::{params, Connection};
+use std::path::PathBuf;
 use uuid::Uuid;
+
+pub fn data_dir() -> PathBuf {
+    dirs::data_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("Chirp")
+}
 
 pub struct Database {
     conn: Connection,
@@ -28,15 +35,13 @@ pub struct Task {
 
 impl Database {
     pub fn new() -> Result<Self, rusqlite::Error> {
-        let data_dir = dirs::data_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join("Chirp");
-        std::fs::create_dir_all(&data_dir).ok();
+        let dir = data_dir();
+        std::fs::create_dir_all(&dir).ok();
 
-        let db_path = data_dir.join("chirp.db");
+        let db_path = dir.join("chirp.db");
         let conn = Connection::open(db_path)?;
 
-        conn.execute_batch("PRAGMA foreign_keys = ON;")?;
+        conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;")?;
 
         conn.execute(
             "CREATE TABLE IF NOT EXISTS lists (

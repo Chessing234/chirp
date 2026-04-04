@@ -1,10 +1,11 @@
+use crate::daemon;
 use crate::db::{Database, List, Task};
 use crate::parser;
 use chrono::Utc;
 use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
 use notify_rust::Notification;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum View {
@@ -39,8 +40,10 @@ pub struct App {
     pub editing_task_id: Option<String>,
     pub should_quit: bool,
     pub status_message: Option<String>,
+    pub daemon_running: bool,
     matcher: SkimMatcherV2,
     last_ping_check: Instant,
+    last_daemon_check: Instant,
 }
 
 impl App {
@@ -71,8 +74,10 @@ impl App {
             editing_task_id: None,
             should_quit: false,
             status_message: None,
+            daemon_running: daemon::is_running(),
             matcher: SkimMatcherV2::default(),
             last_ping_check: Instant::now(),
+            last_daemon_check: Instant::now(),
         }
     }
 
@@ -501,9 +506,19 @@ impl App {
         self.tasks.iter().filter(|t| !t.completed).count()
     }
 
+    /// Periodically check if the background daemon is running.
+    pub fn check_daemon_status(&mut self) {
+        if self.last_daemon_check.elapsed() >= Duration::from_secs(30) {
+            self.daemon_running = daemon::is_running();
+            self.last_daemon_check = Instant::now();
+        }
+    }
+
     /// Check if any tasks with ping intervals need a notification.
+    /// Skips when the daemon is running to avoid double notifications.
     pub fn check_pings(&mut self) {
-        if self.last_ping_check.elapsed() < std::time::Duration::from_secs(10) {
+        if self.daemon_running { return; }
+        if self.last_ping_check.elapsed() < Duration::from_secs(10) {
             return;
         }
         self.last_ping_check = Instant::now();

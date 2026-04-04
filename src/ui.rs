@@ -78,6 +78,10 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect) {
         }
     }
 
+    // Daemon status indicator
+    let daemon_text = if app.daemon_running { " daemon " } else { "" };
+    let daemon_width = daemon_text.len();
+
     let (mode_text, mode_style) = if app.search_mode {
         (" SEARCH ", Style::default().fg(BG).bg(YELLOW).add_modifier(Modifier::BOLD))
     } else if app.editing_task_id.is_some() {
@@ -89,9 +93,13 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect) {
     };
 
     let used_width: usize = spans.iter().map(|s| s.content.len()).sum();
-    let padding = (area.width as usize).saturating_sub(used_width + mode_text.len());
+    let right_width = daemon_width + mode_text.len();
+    let padding = (area.width as usize).saturating_sub(used_width + right_width);
     if padding > 0 {
         spans.push(Span::styled(" ".repeat(padding), Style::default().bg(SURFACE)));
+    }
+    if app.daemon_running {
+        spans.push(Span::styled(daemon_text, Style::default().fg(ACCENT).bg(SURFACE)));
     }
     spans.push(Span::styled(mode_text, mode_style));
 
