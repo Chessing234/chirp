@@ -1,131 +1,106 @@
 # Chirp
 
-**Keyboard-first, ultra-fast desktop task companion.**
+A keyboard-first task manager and ping reminder for the terminal. Vim-style navigation, natural language task entry, recurring reminders with native desktop notifications.
 
-A minimalist task manager combining the speed of a command palette with the power of recurring reminders.
+## Install
 
-<img src="resources/icon.svg" alt="Chirp" width="120">
+```bash
+# from source
+cargo install --path .
+
+# then run
+chirp
+```
+
+Requires Rust 1.70+. On macOS, notifications work out of the box. On Linux, ensure `libdbus` is installed (`apt install libdbus-1-dev` or equivalent).
 
 ## Features
 
-- **Global Shortcut** - Summon anywhere with `Cmd + E`
-- **Quick Add** - Natural language task entry: "Call mom tomorrow 5pm ping 2h"
-- **Smart Pings** - Recurring reminders that keep tasks top of mind
-- **Multiple Lists** - Organize tasks into color-coded lists
-- **Fuzzy Search** - Find any task instantly
-- **Keyboard-First** - Navigate entirely with keyboard
-- **System Tray** - Always accessible from your menu bar
-- **Launch at Login** - Always ready when you need it
+- Vim-style navigation (`j`/`k`, `h`/`l`)
+- Multiple task lists with quick switching
+- Natural language dates and times
+- Recurring ping reminders with desktop notifications
+- Fuzzy search across tasks
+- Persistent SQLite storage
+- Context-sensitive keybind bar (no memorization needed)
 
-## Keyboard Shortcuts
+## Keybindings
 
-| Action | Shortcut |
-|--------|----------|
-| Open Chirp | `Cmd + E` |
-| Close | `Esc` |
-| Navigate tasks | `↑` `↓` |
-| Toggle task | `Cmd + Enter` |
-| Add task | `Enter` |
-| Switch list | `Tab` |
+### Normal mode
 
-## Commands
+| Key | Action |
+|-----|--------|
+| `i` / `a` | Add new task |
+| `j` / `k` / arrows | Navigate tasks |
+| `h` / `l` / tab | Switch lists |
+| `g` / `G` | Jump to top / bottom |
+| `space` / `enter` / `x` | Toggle complete |
+| `d` | Delete task |
+| `/` | Fuzzy search |
+| `c` | Show/hide completed |
+| `n` | New list |
+| `r` | Rename list |
+| `D` | Delete list |
+| `?` | Help overlay |
+| `q` / `esc` | Quit |
 
-Type in the input field:
-- `/list` - Switch between lists
-- `/new <name>` - Create new list
-- `/settings` - Open settings
-- `/clear` - Clear completed tasks
+### Insert mode (adding a task)
 
-## Installation
+| Key | Action |
+|-----|--------|
+| `enter` | Add the task |
+| `esc` | Cancel |
+| `ctrl+a` / `ctrl+e` | Jump to start / end |
+| `ctrl+w` | Delete word |
+| `ctrl+u` | Clear line |
 
-### From Release
+### Search mode
 
-1. Download `Chirp-v1.0.0-macos-arm64.zip` from [Releases](https://github.com/Chessing234/Chirp/releases)
-2. Extract the zip file
-3. Move `Chirp.app` to `/Applications`
-4. **Bypass macOS Gatekeeper** (required for unsigned apps):
-   - Double-click `Chirp.app`
-   - When you see "Apple could not verify", click **Done** (not Move to Trash)
-   - Open **System Settings → Privacy & Security**
-   - Scroll down to the Security section
-   - Click **"Open Anyway"** next to Chirp
-   - Click **Open** in the confirmation dialog
-5. Grant Accessibility permissions when prompted
+| Key | Action |
+|-----|--------|
+| Type | Fuzzy filter tasks |
+| `enter` | Confirm selection |
+| `ctrl+n` / `ctrl+p` | Navigate results |
+| `esc` | Cancel search |
 
-### Build from Source
+## Natural language input
 
-Prerequisites:
-- Node.js 18+
-- Rust (install via [rustup](https://rustup.rs))
-
-```bash
-# Clone the repository
-git clone https://github.com/Chessing234/Chirp.git
-cd Chirp
-
-# Install dependencies
-npm install
-
-# Run in development mode
-cargo tauri dev
-
-# Build for production
-cargo tauri build
-```
-
-## Tech Stack
-
-- **Framework**: Tauri 2 (Rust)
-- **UI**: React + TypeScript
-- **Styling**: TailwindCSS
-- **State**: Zustand
-- **Database**: SQLite (rusqlite)
-- **Build**: Vite + Tauri
-
-## Project Structure
+Type tasks with embedded dates, times, and ping intervals:
 
 ```
-/src
-  /renderer            # React frontend
-    /components
-      CommandPalette.tsx   # Main UI component
-      TaskItem.tsx         # Individual task display
-      ListSelector.tsx     # List switching dropdown
-    /hooks
-      useKeyboard.ts       # Keyboard navigation
-    /lib
-      store.ts             # Zustand state management
-      parser.ts            # Natural language parsing
-      tauri-api.ts         # Tauri IPC bindings
-
-/src-tauri             # Rust backend
-  /src
-    lib.rs             # App logic, database, shortcuts
-    main.rs            # Entry point
+buy groceries tomorrow 5pm
+review proposal in 2h
+call mom monday 9am ping 30m
+exercise next week ping 1h
+standup today 10am ping 15m
+deploy friday 3pm
 ```
 
-## Data Storage
+### Supported date/time formats
 
-All data is stored locally in SQLite:
+- `tomorrow`, `today`, `next week`
+- Day names: `monday`, `tuesday`, etc.
+- Times: `5pm`, `3:30pm`, `at 9am`
+- Relative: `in 30m`, `in 2h`
+
+### Ping reminders
+
+Add `ping <interval>` to any task to get recurring desktop notifications:
+
+```
+ping 30m     -- every 30 minutes
+ping 1h      -- every hour
+every 15m    -- alternative syntax
+```
+
+Pings start firing once the task's due time passes (or immediately if no due date is set). Notifications repeat at the specified interval until the task is marked complete.
+
+## Data
+
+SQLite database stored at:
 - **macOS**: `~/Library/Application Support/Chirp/chirp.db`
-
-## Design Philosophy
-
-- **Dark theme only** - Easy on the eyes
-- **Monochrome + accent** - Minimal visual noise
-- **Terminal aesthetic** - JetBrains Mono font
-- **Smooth animations** - 150-250ms transitions
-- **Keyboard-first** - Speed over clicks
-
-## Requirements
-
-- macOS 10.15 (Catalina) or later
-- Apple Silicon (arm64)
+- **Linux**: `~/.local/share/Chirp/chirp.db`
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
-
----
-
-Built with Rust and intention.
+MIT

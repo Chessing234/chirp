@@ -1,13 +1,5 @@
-# Dependencies
-node_modules/
-
-# Build outputs
-dist/
-release/
-
-# Logs
-*.log
-npm-debug.log*
+# Build
+/target/
 
 # Database files
 *.db
@@ -27,14 +19,6 @@ Thumbs.db
 # Environment
 .env
 .env.local
-
-# Electron (legacy)
-electron-builder.yaml
-
-# Tauri
-src-tauri/target/
-src-tauri/WixTools/
-src-tauri/*.rs.bk
 
 # Bundles
 *.dmg

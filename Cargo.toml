@@ -1,0 +1,20 @@
+[package]
+name = "chirp"
+version = "0.1.0"
+edition = "2021"
+description = "Keyboard-first task companion for the terminal"
+
+[[bin]]
+name = "chirp"
+path = "src/main.rs"
+
+[dependencies]
+ratatui = "0.29"
+crossterm = "0.28"
+rusqlite = { version = "0.32", features = ["bundled"] }
+uuid = { version = "1", features = ["v4"] }
+chrono = "0.4"
+dirs = "5"
+regex = "1"
+fuzzy-matcher = "0.3"
+notify-rust = "4"
