@@ -348,3 +348,152 @@ pub fn parse_ping_str(s: &str) -> Option<i64> {
     let unit = caps[2].to_lowercase();
     Some(if unit.starts_with('m') { amount } else { amount * 60 })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_all_modifiers_combined() {
+        let parsed = parse_task_input("buy groceries p1 daily ping 1h tomorrow 5pm");
+        assert_eq!(parsed.priority, Some(1));
+        assert_eq!(parsed.recurrence, Some("daily".to_string()));
+        assert_eq!(parsed.ping_interval, Some(60));
+        assert!(parsed.due_at.is_some());
+        assert_eq!(parsed.content, "buy groceries");
+    }
+
+    #[test]
+    fn test_modifiers_different_order() {
+        let parsed = parse_task_input("ping 30m daily call mom p2 tomorrow");
+        assert_eq!(parsed.priority, Some(2));
+        assert_eq!(parsed.recurrence, Some("daily".to_string()));
+        assert_eq!(parsed.ping_interval, Some(30));
+        assert!(parsed.due_at.is_some());
+        assert_eq!(parsed.content, "call mom");
+    }
+
+    #[test]
+    fn test_plain_task_no_modifiers() {
+        let parsed = parse_task_input("buy milk");
+        assert_eq!(parsed.content, "buy milk");
+        assert!(parsed.priority.is_none());
+        assert!(parsed.recurrence.is_none());
+        assert!(parsed.ping_interval.is_none());
+        assert!(parsed.due_at.is_none());
+    }
+
+    #[test]
+    fn test_priority_levels() {
+        for p in 1..=3 {
+            let parsed = parse_task_input(&format!("task p{}", p));
+            assert_eq!(parsed.priority, Some(p));
+            assert_eq!(parsed.content, "task");
+        }
+    }
+
+    #[test]
+    fn test_recurrence_types() {
+        for rec in ["daily", "weekly", "monthly"] {
+            let parsed = parse_task_input(&format!("task {}", rec));
+            assert_eq!(parsed.recurrence.as_deref(), Some(rec));
+            assert_eq!(parsed.content, "task");
+            // Recurrence without explicit due should get a default due_at
+            assert!(parsed.due_at.is_some());
+        }
+    }
+
+    #[test]
+    fn test_ping_minutes_and_hours() {
+        let m = parse_task_input("task ping 45m");
+        assert_eq!(m.ping_interval, Some(45));
+
+        let h = parse_task_input("task ping 2h");
+        assert_eq!(h.ping_interval, Some(120));
+    }
+
+    #[test]
+    fn test_relative_time() {
+        let parsed = parse_task_input("meeting in 30m");
+        assert!(parsed.due_at.is_some());
+        assert_eq!(parsed.content, "meeting");
+
+        let parsed2 = parse_task_input("review in 2h");
+        assert!(parsed2.due_at.is_some());
+    }
+
+    #[test]
+    fn test_format_ping_interval() {
+        assert_eq!(format_ping_interval(30), "30m");
+        assert_eq!(format_ping_interval(60), "1h");
+        assert_eq!(format_ping_interval(90), "1h30m");
+        assert_eq!(format_ping_interval(1), "1m");
+    }
+
+    #[test]
+    fn test_format_priority() {
+        assert_eq!(format_priority(1), "p1");
+        assert_eq!(format_priority(2), "p2");
+        assert_eq!(format_priority(3), "p3");
+    }
+
+    #[test]
+    fn test_recurrence_next_due() {
+        let now = Local::now().timestamp_millis();
+        let next_daily = next_recurrence_due(Some(now), "daily").unwrap();
+        let diff_hours = (next_daily - now) / (1000 * 60 * 60);
+        assert_eq!(diff_hours, 24);
+
+        let next_weekly = next_recurrence_due(Some(now), "weekly").unwrap();
+        let diff_days = (next_weekly - now) / (1000 * 60 * 60 * 24);
+        assert_eq!(diff_days, 7);
+
+        assert!(next_recurrence_due(Some(now), "invalid").is_none());
+    }
+
+    #[test]
+    fn test_parse_ping_str() {
+        assert_eq!(parse_ping_str("30m"), Some(30));
+        assert_eq!(parse_ping_str("2h"), Some(120));
+        assert_eq!(parse_ping_str("1hr"), Some(60));
+        assert_eq!(parse_ping_str("15min"), Some(15));
+        assert_eq!(parse_ping_str("invalid"), None);
+        assert_eq!(parse_ping_str(""), None);
+    }
+
+    #[test]
+    fn test_reconstruct_roundtrip() {
+        let result = reconstruct_task_input("buy milk", None, Some(30), Some(2), Some("daily"));
+        assert!(result.contains("buy milk"));
+        assert!(result.contains("ping 30m"));
+        assert!(result.contains("p2"));
+        assert!(result.contains("daily"));
+
+        // Reconstruct with no modifiers
+        let plain = reconstruct_task_input("simple task", None, None, None, None);
+        assert_eq!(plain, "simple task");
+    }
+
+    #[test]
+    fn test_tomorrow_with_time() {
+        let parsed = parse_task_input("call mom tomorrow 3pm");
+        assert!(parsed.due_at.is_some());
+        assert_eq!(parsed.content, "call mom");
+    }
+
+    #[test]
+    fn test_day_names() {
+        for day in ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] {
+            let parsed = parse_task_input(&format!("task {}", day));
+            assert!(parsed.due_at.is_some(), "failed for {}", day);
+            assert_eq!(parsed.content, "task");
+        }
+    }
+
+    #[test]
+    fn test_whitespace_cleanup() {
+        let parsed = parse_task_input("  lots   of   spaces   p1  ");
+        assert_eq!(parsed.content, "lots of spaces");
+        assert_eq!(parsed.priority, Some(1));
+    }
+}

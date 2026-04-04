@@ -9,7 +9,7 @@ use std::process;
 use std::thread;
 use std::time::Duration;
 
-fn pid_path() -> PathBuf {
+pub(crate) fn pid_path() -> PathBuf {
     db::data_dir().join("chirp.pid")
 }
 
@@ -289,4 +289,39 @@ fn uninstall_systemd() {
 
     remove_pid();
     println!("Uninstalled chirp daemon");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pid_file_stale_detection() {
+        let path = pid_path();
+        let backup = fs::read_to_string(&path).ok();
+
+        // Write a definitely-dead PID (max value, won't exist)
+        fs::write(&path, "4294967295").ok();
+        assert!(!is_running(), "stale PID should not be detected as running");
+
+        // Write our own PID (we're alive)
+        fs::write(&path, format!("{}", process::id())).ok();
+        assert!(is_running(), "our own PID should be detected as running");
+
+        // Missing file
+        let _ = fs::remove_file(&path);
+        assert!(!is_running(), "missing PID file should not be detected as running");
+
+        // Restore
+        if let Some(content) = backup {
+            fs::write(&path, content).ok();
+        }
+    }
+
+    #[test]
+    fn test_pid_path_is_in_data_dir() {
+        let path = pid_path();
+        assert!(path.ends_with("chirp.pid"));
+        assert!(path.to_string_lossy().contains("Chirp"));
+    }
 }

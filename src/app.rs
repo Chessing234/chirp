@@ -1,7 +1,7 @@
 use crate::daemon;
 use crate::db::{Database, List, Task};
 use crate::parser;
-use chrono::Utc;
+use chrono::{Local, TimeZone, Utc};
 use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
 use notify_rust::Notification;
@@ -38,9 +38,14 @@ pub struct App {
     pub show_completed: bool,
     pub search_mode: bool,
     pub editing_task_id: Option<String>,
+    pub viewing_today: bool,
+    pub expanded_task_id: Option<String>,
     pub should_quit: bool,
     pub status_message: Option<String>,
     pub daemon_running: bool,
+    // Agenda
+    pub agenda_due_count: usize,
+    pub agenda_next: Option<(String, i64)>,
     matcher: SkimMatcherV2,
     last_ping_check: Instant,
     last_daemon_check: Instant,
@@ -57,28 +62,28 @@ impl App {
         };
         let filtered_indices = (0..tasks.len()).collect();
 
-        Self {
-            db,
-            lists,
-            tasks,
-            filtered_indices,
-            selected_list: 0,
-            selected_task: 0,
-            scroll_offset: 0,
-            input: String::new(),
-            cursor_pos: 0,
+        let mut app = Self {
+            db, lists, tasks, filtered_indices,
+            selected_list: 0, selected_task: 0, scroll_offset: 0,
+            input: String::new(), cursor_pos: 0,
             input_mode: InputMode::Normal,
             view: View::Tasks,
             show_completed: true,
             search_mode: false,
             editing_task_id: None,
+            viewing_today: false,
+            expanded_task_id: None,
             should_quit: false,
             status_message: None,
             daemon_running: daemon::is_running(),
+            agenda_due_count: 0,
+            agenda_next: None,
             matcher: SkimMatcherV2::default(),
             last_ping_check: Instant::now(),
             last_daemon_check: Instant::now(),
-        }
+        };
+        app.refresh_agenda();
+        app
     }
 
     pub fn current_list(&self) -> Option<&List> {
@@ -89,13 +94,31 @@ impl App {
         self.current_list().map(|l| l.id.clone())
     }
 
+    pub fn list_name_for_id(&self, list_id: &str) -> String {
+        self.lists.iter()
+            .find(|l| l.id == list_id)
+            .map(|l| l.name.clone())
+            .unwrap_or_else(|| "?".to_string())
+    }
+
+    fn end_of_today_ms() -> i64 {
+        let now = Local::now();
+        now.date_naive()
+            .and_hms_opt(23, 59, 59)
+            .map(|dt| Local.from_local_datetime(&dt).unwrap().timestamp_millis())
+            .unwrap_or(0)
+    }
+
     pub fn refresh_tasks(&mut self) {
-        if let Some(list_id) = self.current_list_id() {
+        if self.viewing_today {
+            self.tasks = self.db.get_today_tasks(Self::end_of_today_ms());
+        } else if let Some(list_id) = self.current_list_id() {
             self.tasks = self.db.get_tasks_by_list(&list_id);
         } else {
             self.tasks.clear();
         }
         self.apply_filter();
+        self.refresh_agenda();
     }
 
     pub fn refresh_lists(&mut self) {
@@ -105,15 +128,21 @@ impl App {
         }
     }
 
+    pub fn refresh_agenda(&mut self) {
+        let now = Local::now();
+        let end_ms = Self::end_of_today_ms();
+        let now_ms = now.timestamp_millis();
+        self.agenda_due_count = self.db.count_due_before(end_ms);
+        self.agenda_next = self.db.next_upcoming_task(now_ms);
+    }
+
     pub fn visible_entries(&self) -> Vec<VisibleEntry> {
         let mut entries = Vec::new();
         let mut has_completed = false;
 
         for &i in &self.filtered_indices {
             if let Some(task) = self.tasks.get(i) {
-                if !task.completed {
-                    entries.push(VisibleEntry::Task(i));
-                }
+                if !task.completed { entries.push(VisibleEntry::Task(i)); }
             }
         }
 
@@ -133,14 +162,11 @@ impl App {
                 }
             }
         }
-
         entries
     }
 
     pub fn selectable_count(&self) -> usize {
-        self.visible_entries().iter()
-            .filter(|e| matches!(e, VisibleEntry::Task(_)))
-            .count()
+        self.visible_entries().iter().filter(|e| matches!(e, VisibleEntry::Task(_))).count()
     }
 
     pub fn nth_selectable(&self, n: usize) -> Option<usize> {
@@ -155,11 +181,8 @@ impl App {
 
     pub fn clamp_selection(&mut self) {
         let count = self.selectable_count();
-        if count == 0 {
-            self.selected_task = 0;
-        } else if self.selected_task >= count {
-            self.selected_task = count - 1;
-        }
+        if count == 0 { self.selected_task = 0; }
+        else if self.selected_task >= count { self.selected_task = count - 1; }
     }
 
     fn apply_filter(&mut self) {
@@ -167,14 +190,40 @@ impl App {
             let mut scored: Vec<(usize, i64)> = self.tasks.iter().enumerate()
                 .filter_map(|(i, task)| {
                     self.matcher.fuzzy_match(&task.content, &self.input).map(|score| (i, score))
-                })
-                .collect();
+                }).collect();
             scored.sort_by(|a, b| b.1.cmp(&a.1));
             self.filtered_indices = scored.into_iter().map(|(i, _)| i).collect();
         } else {
             self.filtered_indices = (0..self.tasks.len()).collect();
         }
         self.clamp_selection();
+    }
+
+    // === Today / List cycling ===
+
+    pub fn toggle_today(&mut self) {
+        self.viewing_today = !self.viewing_today;
+        self.selected_task = 0;
+        self.scroll_offset = 0;
+        self.expanded_task_id = None;
+        self.refresh_tasks();
+    }
+
+    pub fn cycle_list(&mut self, forward: bool) {
+        let total = 1 + self.lists.len(); // Today + real lists
+        if total <= 1 { return; }
+        let current = if self.viewing_today { 0 } else { 1 + self.selected_list };
+        let next = if forward { (current + 1) % total } else { (current + total - 1) % total };
+        if next == 0 {
+            self.viewing_today = true;
+        } else {
+            self.viewing_today = false;
+            self.selected_list = next - 1;
+        }
+        self.selected_task = 0;
+        self.scroll_offset = 0;
+        self.expanded_task_id = None;
+        self.refresh_tasks();
     }
 
     // === Actions ===
@@ -192,48 +241,67 @@ impl App {
                     self.apply_filter();
                     return;
                 }
-                if text.is_empty() {
+                if text.is_empty() { return; }
+
+                // Note command: "note <text>" attaches a note to selected task
+                if text.starts_with("note ") || text == "note" {
+                    let note_text = text.strip_prefix("note").unwrap().trim();
+                    if let Some(task) = self.selected_task_data() {
+                        let id = task.id.clone();
+                        if note_text.is_empty() {
+                            self.db.update_task_note(&id, None);
+                            self.status_message = Some("Note cleared".to_string());
+                        } else {
+                            self.db.update_task_note(&id, Some(note_text));
+                            self.status_message = Some("Note saved".to_string());
+                        }
+                        self.input.clear();
+                        self.cursor_pos = 0;
+                        self.refresh_tasks();
+                    } else {
+                        self.status_message = Some("No task selected".to_string());
+                    }
                     return;
                 }
 
                 let parsed = parser::parse_task_input(&text);
 
                 if let Some(edit_id) = self.editing_task_id.take() {
-                    // Update existing task
                     self.db.update_task(
-                        &edit_id,
-                        &parsed.content,
-                        parsed.due_at,
-                        parsed.ping_interval,
-                        parsed.priority,
-                        parsed.recurrence.as_deref(),
+                        &edit_id, &parsed.content, parsed.due_at, parsed.ping_interval,
+                        parsed.priority, parsed.recurrence.as_deref(),
                     );
                     self.status_message = Some(format!("Updated: {}", parsed.content));
                 } else if let Some(list_id) = self.current_list_id() {
-                    // Create new task
                     self.db.create_task(
-                        &list_id,
-                        &parsed.content,
-                        parsed.due_at,
-                        parsed.ping_interval,
-                        parsed.priority,
-                        parsed.recurrence.as_deref(),
+                        &list_id, &parsed.content, parsed.due_at, parsed.ping_interval,
+                        parsed.priority, parsed.recurrence.as_deref(),
                     );
                     self.status_message = Some(format!("Added: {}", parsed.content));
+                } else if self.viewing_today {
+                    // Can't add tasks in Today view without a target list
+                    // Use the first (Inbox) list as default
+                    if let Some(list) = self.lists.first() {
+                        let lid = list.id.clone();
+                        self.db.create_task(
+                            &lid, &parsed.content, parsed.due_at, parsed.ping_interval,
+                            parsed.priority, parsed.recurrence.as_deref(),
+                        );
+                        self.status_message = Some(format!("Added to Inbox: {}", parsed.content));
+                    }
                 }
 
                 self.input.clear();
                 self.cursor_pos = 0;
                 self.refresh_tasks();
-                if self.editing_task_id.is_none() {
-                    self.selected_task = 0;
-                }
+                if self.editing_task_id.is_none() { self.selected_task = 0; }
             }
             View::NewList => {
                 if text.is_empty() { return; }
                 self.db.create_list(&text);
                 self.refresh_lists();
                 self.selected_list = self.lists.len() - 1;
+                self.viewing_today = false;
                 self.refresh_tasks();
                 self.status_message = Some(format!("Created list: {}", text));
                 self.input.clear();
@@ -261,11 +329,8 @@ impl App {
     pub fn start_edit(&mut self) {
         if let Some(task) = self.selected_task_data() {
             let reconstructed = parser::reconstruct_task_input(
-                &task.content,
-                task.due_at,
-                task.ping_interval,
-                task.priority,
-                task.recurrence.as_deref(),
+                &task.content, task.due_at, task.ping_interval,
+                task.priority, task.recurrence.as_deref(),
             );
             self.editing_task_id = Some(task.id.clone());
             self.input = reconstructed;
@@ -282,6 +347,17 @@ impl App {
         self.input_mode = InputMode::Normal;
     }
 
+    pub fn toggle_detail_pane(&mut self) {
+        if let Some(task) = self.selected_task_data() {
+            let id = task.id.clone();
+            if self.expanded_task_id.as_ref() == Some(&id) {
+                self.expanded_task_id = None;
+            } else {
+                self.expanded_task_id = Some(id);
+            }
+        }
+    }
+
     pub fn toggle_selected_task(&mut self) {
         if let Some(task) = self.selected_task_data() {
             let id = task.id.clone();
@@ -295,13 +371,10 @@ impl App {
             self.db.toggle_task(&id);
 
             if !was_completed {
-                // Completing a task — check for recurrence
                 if let Some(ref rec) = recurrence {
                     if let Some(list_id) = self.db.get_task_list_id(&id) {
                         let next_due = parser::next_recurrence_due(due_at, rec);
-                        self.db.create_task(
-                            &list_id, &content, next_due, ping_interval, priority, Some(rec),
-                        );
+                        self.db.create_task(&list_id, &content, next_due, ping_interval, priority, Some(rec));
                         let due_text = next_due
                             .map(|d| parser::format_due_date(d))
                             .unwrap_or_else(|| "soon".to_string());
@@ -321,6 +394,7 @@ impl App {
         if let Some(task) = self.selected_task_data() {
             let id = task.id.clone();
             self.db.delete_task(&id);
+            self.expanded_task_id = None;
             self.status_message = Some("Deleted".to_string());
             self.refresh_tasks();
         }
@@ -347,9 +421,7 @@ impl App {
         if let Some(task) = self.selected_task_data() {
             if task.ping_interval.is_some() {
                 let id = task.id.clone();
-                let interval_text = task.ping_interval
-                    .map(|i| parser::format_ping_interval(i))
-                    .unwrap_or_default();
+                let interval_text = task.ping_interval.map(|i| parser::format_ping_interval(i)).unwrap_or_default();
                 self.db.snooze_task(&id);
                 self.status_message = Some(format!("Snoozed for {}", interval_text));
                 self.refresh_tasks();
@@ -372,7 +444,7 @@ impl App {
                 self.selected_task -= 1;
                 self.refresh_tasks();
             } else {
-                self.status_message = Some("Can't reorder across priority/completion groups".to_string());
+                self.status_message = Some("Can't reorder across groups".to_string());
             }
         }
     }
@@ -391,16 +463,14 @@ impl App {
                 self.selected_task += 1;
                 self.refresh_tasks();
             } else {
-                self.status_message = Some("Can't reorder across priority/completion groups".to_string());
+                self.status_message = Some("Can't reorder across groups".to_string());
             }
         }
     }
 
     // === Navigation ===
 
-    pub fn move_selection_up(&mut self) {
-        if self.selected_task > 0 { self.selected_task -= 1; }
-    }
+    pub fn move_selection_up(&mut self) { if self.selected_task > 0 { self.selected_task -= 1; } }
 
     pub fn move_selection_down(&mut self) {
         let count = self.selectable_count();
@@ -416,18 +486,22 @@ impl App {
 
     pub fn next_list(&mut self) {
         if !self.lists.is_empty() {
+            self.viewing_today = false;
             self.selected_list = (self.selected_list + 1) % self.lists.len();
             self.selected_task = 0;
             self.scroll_offset = 0;
+            self.expanded_task_id = None;
             self.refresh_tasks();
         }
     }
 
     pub fn prev_list(&mut self) {
         if !self.lists.is_empty() {
+            self.viewing_today = false;
             self.selected_list = if self.selected_list == 0 { self.lists.len() - 1 } else { self.selected_list - 1 };
             self.selected_task = 0;
             self.scroll_offset = 0;
+            self.expanded_task_id = None;
             self.refresh_tasks();
         }
     }
@@ -506,7 +580,6 @@ impl App {
         self.tasks.iter().filter(|t| !t.completed).count()
     }
 
-    /// Periodically check if the background daemon is running.
     pub fn check_daemon_status(&mut self) {
         if self.last_daemon_check.elapsed() >= Duration::from_secs(30) {
             self.daemon_running = daemon::is_running();
@@ -514,13 +587,9 @@ impl App {
         }
     }
 
-    /// Check if any tasks with ping intervals need a notification.
-    /// Skips when the daemon is running to avoid double notifications.
     pub fn check_pings(&mut self) {
         if self.daemon_running { return; }
-        if self.last_ping_check.elapsed() < Duration::from_secs(10) {
-            return;
-        }
+        if self.last_ping_check.elapsed() < Duration::from_secs(10) { return; }
         self.last_ping_check = Instant::now();
 
         let now = Utc::now().timestamp_millis();

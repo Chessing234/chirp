@@ -155,6 +155,9 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
         KeyCode::Char('h') | KeyCode::Left => app.prev_list(),
         KeyCode::Char('l') | KeyCode::Right | KeyCode::Tab => app.next_list(),
         KeyCode::BackTab => app.prev_list(),
+        KeyCode::Char(']') => app.cycle_list(true),
+        KeyCode::Char('[') => app.cycle_list(false),
+        KeyCode::Char('t') => app.toggle_today(),
 
         // Reorder tasks (Shift+J / Shift+K)
         KeyCode::Char('J') => app.move_task_down(),
@@ -169,8 +172,8 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
             app.cursor_pos = 0;
         }
         KeyCode::Char('e') => app.start_edit(),
-        KeyCode::Char(' ') | KeyCode::Enter => app.toggle_selected_task(),
-        KeyCode::Char('x') => app.toggle_selected_task(),
+        KeyCode::Enter => app.toggle_detail_pane(),
+        KeyCode::Char(' ') | KeyCode::Char('x') => app.toggle_selected_task(),
         KeyCode::Char('s') => app.snooze_selected(),
         KeyCode::Char('d') => {
             if app.selected_task_data().is_some() {
