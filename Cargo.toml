@@ -1,10 +1,13 @@
 [package]
-name = "chirp"
-version = "0.2.0"
+name = "chirp-tui"
+version = "0.3.1"
 edition = "2021"
-description = "Keyboard-first task companion for the terminal"
+description = "Minimalist task manager and ping reminder for the terminal"
 license = "MIT"
-repository = "https://github.com/takshkothari/chirp"
+repository = "https://github.com/Chessing234/chirp"
+readme = "README.md"
+keywords = ["task", "tui", "terminal", "todo", "reminder"]
+categories = ["command-line-utilities"]
 
 [[bin]]
 name = "chirp"
