@@ -44,6 +44,8 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
 
     draw_header(frame, app, chunks[0]);
     frame.render_widget(Paragraph::new("").style(Style::default().bg(BG)), chunks[1]);
+    app.task_area_y = chunks[2].y;
+    app.task_area_height = chunks[2].height;
     draw_tasks(frame, app, chunks[2]);
     if detail_h > 0 { draw_detail(frame, app, chunks[3]); }
     frame.render_widget(Paragraph::new(Line::from(Span::styled(
@@ -179,7 +181,7 @@ fn draw_tasks(frame: &mut Frame, app: &mut App, area: Rect) {
     if entries.is_empty() {
         let msg = if app.search_mode && !app.input.is_empty() { "no matches" }
         else if app.viewing_today { "nothing due today" }
-        else if app.tasks.is_empty() { "no tasks yet \u{2014} press i to add one" }
+        else if app.tasks.is_empty() { "no tasks yet, press i to add one" }
         else { "all done" };
         frame.render_widget(
             Paragraph::new(Line::from(Span::styled(format!("  {}", msg), Style::default().fg(DIM))))
@@ -388,8 +390,8 @@ fn draw_keybinds(frame: &mut Frame, app: &App, area: Rect) {
         (InputMode::Insert, _, _) if app.editing_task_id.is_some() => vec![("\u{21b5}", "save"), ("esc", "cancel")],
         (InputMode::Insert, _, _) => vec![("\u{21b5}", "add"), ("esc", "cancel")],
         (InputMode::Normal, _, _) => vec![
-            ("i", "add"), ("e", "edit"), ("\u{21b5}", "detail"), ("\u{2423}", "done"),
-            ("s", "snooze"), ("d", "del"), ("/", "search"), ("t", "today"),
+            ("i", "add"), ("e", "edit"), ("\u{2423}", "done"), ("d", "del"),
+            ("u", "undo"), ("s", "snooze"), ("/", "search"), ("t", "today"),
             ("?", "help"), ("q", "quit"),
         ],
     };
@@ -462,7 +464,7 @@ fn draw_confirm(frame: &mut Frame, area: Rect, message: &str) {
 
 fn draw_help(frame: &mut Frame, area: Rect) {
     let w = 54u16.min(area.width.saturating_sub(4));
-    let h = 30u16.min(area.height.saturating_sub(2));
+    let h = 31u16.min(area.height.saturating_sub(2));
     let r = centered(area, w, h);
     frame.render_widget(Clear, r);
 
@@ -489,6 +491,7 @@ fn draw_help(frame: &mut Frame, area: Rect) {
         hline("    J / K", "reorder", k, d),
         hline("    /", "search", k, d),
         hline("    c", "show/hide done", k, d),
+        hline("    u", "undo", k, d),
         hline("    note <text>", "attach note", k, d),
         Line::from(""),
         Line::from(Span::styled("  Syntax", s)),

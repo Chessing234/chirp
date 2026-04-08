@@ -162,6 +162,15 @@ impl Database {
         ).unwrap_or(-1)
     }
 
+    pub fn get_all_tasks(&self) -> Vec<Task> {
+        let sql = format!(
+            "SELECT {} FROM tasks ORDER BY list_id, completed ASC, COALESCE(priority,4) ASC, sort_order ASC",
+            Self::TASK_COLS
+        );
+        let mut stmt = self.conn.prepare(&sql).unwrap();
+        stmt.query_map([], Self::read_task).unwrap().filter_map(|r| r.ok()).collect()
+    }
+
     pub fn get_tasks_by_list(&self, list_id: &str) -> Vec<Task> {
         let sql = format!(
             "SELECT {} FROM tasks WHERE list_id=?1 ORDER BY completed ASC, COALESCE(priority,4) ASC, sort_order ASC",
@@ -192,6 +201,25 @@ impl Database {
             "SELECT content, due_at FROM tasks WHERE completed=0 AND due_at IS NOT NULL AND due_at >= ?1 ORDER BY due_at ASC LIMIT 1",
             [now_ms], |r| Ok((r.get(0)?, r.get(1)?)),
         ).ok()
+    }
+
+    pub fn list_task_counts(&self, list_id: &str) -> (usize, usize) {
+        let total: usize = self.conn.query_row(
+            "SELECT COUNT(*) FROM tasks WHERE list_id=?1", [list_id], |r| r.get(0),
+        ).unwrap_or(0);
+        let pending: usize = self.conn.query_row(
+            "SELECT COUNT(*) FROM tasks WHERE list_id=?1 AND completed=0", [list_id], |r| r.get(0),
+        ).unwrap_or(0);
+        (pending, total)
+    }
+
+    pub fn get_completed_today(&self, start_of_today_ms: i64) -> Vec<Task> {
+        let sql = format!(
+            "SELECT {} FROM tasks WHERE completed=1 AND updated_at >= ?1 ORDER BY updated_at DESC",
+            Self::TASK_COLS
+        );
+        let mut stmt = self.conn.prepare(&sql).unwrap();
+        stmt.query_map([start_of_today_ms], Self::read_task).unwrap().filter_map(|r| r.ok()).collect()
     }
 
     pub fn create_task(
@@ -438,5 +466,67 @@ mod tests {
         assert_eq!(tasks[1].content, "medium");
         assert_eq!(tasks[2].content, "low");
         assert_eq!(tasks[3].content, "none");
+    }
+
+    #[test]
+    fn test_export_all_tasks() {
+        let db = test_db();
+        let lists = db.get_all_lists();
+        let inbox_id = &lists[0].id;
+
+        let work = db.create_list("Work");
+        db.create_task(inbox_id, "buy milk", Some(1000), Some(30), Some(2), Some("daily"));
+        db.create_task(&work.id, "standup", None, None, Some(1), None);
+        db.create_task(inbox_id, "plain task", None, None, None, None);
+
+        let all = db.get_all_tasks();
+        assert_eq!(all.len(), 3);
+
+        // Verify fields are populated correctly
+        let milk = all.iter().find(|t| t.content == "buy milk").unwrap();
+        assert_eq!(milk.due_at, Some(1000));
+        assert_eq!(milk.ping_interval, Some(30));
+        assert_eq!(milk.priority, Some(2));
+        assert_eq!(milk.recurrence.as_deref(), Some("daily"));
+        assert_eq!(milk.list_id, *inbox_id);
+
+        let standup = all.iter().find(|t| t.content == "standup").unwrap();
+        assert_eq!(standup.priority, Some(1));
+        assert_eq!(standup.list_id, work.id);
+
+        let plain = all.iter().find(|t| t.content == "plain task").unwrap();
+        assert!(plain.due_at.is_none());
+        assert!(plain.ping_interval.is_none());
+        assert!(plain.priority.is_none());
+        assert!(plain.recurrence.is_none());
+
+        // Verify JSON serialization round-trip
+        let list_map: std::collections::HashMap<String, String> = db.get_all_lists()
+            .into_iter().map(|l| (l.id.clone(), l.name)).collect();
+
+        let json_tasks: Vec<serde_json::Value> = all.iter().map(|task| {
+            let mut obj = serde_json::json!({
+                "content": task.content,
+                "list": list_map.get(&task.list_id).unwrap(),
+                "completed": task.completed,
+            });
+            if let Some(p) = task.priority { obj["priority"] = serde_json::json!(p); }
+            if let Some(due) = task.due_at { obj["due_at"] = serde_json::json!(due); }
+            if let Some(ping) = task.ping_interval { obj["ping"] = serde_json::json!(ping); }
+            if let Some(ref rec) = task.recurrence { obj["recurrence"] = serde_json::json!(rec); }
+            obj
+        }).collect();
+
+        let json_str = serde_json::to_string(&json_tasks).unwrap();
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&json_str).unwrap();
+        assert_eq!(parsed.len(), 3);
+
+        let milk_json = parsed.iter().find(|v| v["content"] == "buy milk").unwrap();
+        assert_eq!(milk_json["list"], "Inbox");
+        assert_eq!(milk_json["priority"], 2);
+        assert_eq!(milk_json["due_at"], 1000);
+        assert_eq!(milk_json["ping"], 30);
+        assert_eq!(milk_json["recurrence"], "daily");
+        assert_eq!(milk_json["completed"], false);
     }
 }

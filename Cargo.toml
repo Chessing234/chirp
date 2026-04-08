@@ -1,6 +1,6 @@
 [package]
 name = "chirp-tui"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2021"
 description = "Minimalist task manager and ping reminder for the terminal"
 license = "MIT"

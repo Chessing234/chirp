@@ -23,6 +23,15 @@ pub enum InputMode {
     Insert,
 }
 
+const MAX_UNDO: usize = 20;
+
+#[derive(Debug, Clone)]
+pub enum UndoAction {
+    DeleteTask(Task),
+    ToggleTask { id: String, was_completed: bool },
+    DeleteList { list: List, tasks: Vec<Task> },
+}
+
 pub struct App {
     pub db: Database,
     pub lists: Vec<List>,
@@ -43,6 +52,10 @@ pub struct App {
     pub should_quit: bool,
     pub status_message: Option<String>,
     pub daemon_running: bool,
+    pub undo_stack: Vec<UndoAction>,
+    // Layout info for mouse support
+    pub task_area_y: u16,
+    pub task_area_height: u16,
     // Agenda
     pub agenda_due_count: usize,
     pub agenda_next: Option<(String, i64)>,
@@ -76,6 +89,9 @@ impl App {
             should_quit: false,
             status_message: None,
             daemon_running: daemon::is_running(),
+            undo_stack: Vec::new(),
+            task_area_y: 2,
+            task_area_height: 0,
             agenda_due_count: 0,
             agenda_next: None,
             matcher: SkimMatcherV2::default(),
@@ -84,6 +100,15 @@ impl App {
         };
         app.refresh_agenda();
         app
+    }
+
+    pub fn select_list_by_name(&mut self, name: &str) {
+        let lower = name.to_lowercase();
+        if let Some(idx) = self.lists.iter().position(|l| l.name.to_lowercase() == lower) {
+            self.selected_list = idx;
+            self.viewing_today = false;
+            self.refresh_tasks();
+        }
     }
 
     pub fn current_list(&self) -> Option<&List> {
@@ -223,6 +248,60 @@ impl App {
         self.selected_task = 0;
         self.scroll_offset = 0;
         self.expanded_task_id = None;
+        self.refresh_tasks();
+    }
+
+    // === Undo ===
+
+    fn push_undo(&mut self, action: UndoAction) {
+        self.undo_stack.push(action);
+        if self.undo_stack.len() > MAX_UNDO {
+            self.undo_stack.remove(0);
+        }
+    }
+
+    pub fn undo(&mut self) {
+        let action = match self.undo_stack.pop() {
+            Some(a) => a,
+            None => {
+                self.status_message = Some("nothing to undo".to_string());
+                return;
+            }
+        };
+
+        match action {
+            UndoAction::DeleteTask(task) => {
+                self.db.create_task(
+                    &task.list_id, &task.content, task.due_at, task.ping_interval,
+                    task.priority, task.recurrence.as_deref(),
+                );
+                self.status_message = Some(format!("restored: {}", task.content));
+            }
+            UndoAction::ToggleTask { id, was_completed } => {
+                // Check if task still exists before toggling back
+                if self.db.get_task_list_id(&id).is_some() {
+                    self.db.toggle_task(&id);
+                    self.status_message = Some(if was_completed {
+                        "undo: marked incomplete".to_string()
+                    } else {
+                        "undo: marked complete".to_string()
+                    });
+                } else {
+                    self.status_message = Some("can't undo: task was deleted".to_string());
+                }
+            }
+            UndoAction::DeleteList { list, tasks } => {
+                let new_list = self.db.create_list(&list.name);
+                for task in &tasks {
+                    self.db.create_task(
+                        &new_list.id, &task.content, task.due_at, task.ping_interval,
+                        task.priority, task.recurrence.as_deref(),
+                    );
+                }
+                self.refresh_lists();
+                self.status_message = Some(format!("restored list: {}", list.name));
+            }
+        }
         self.refresh_tasks();
     }
 
@@ -368,6 +447,7 @@ impl App {
             let priority = task.priority;
             let content = task.content.clone();
 
+            self.push_undo(UndoAction::ToggleTask { id: id.clone(), was_completed });
             self.db.toggle_task(&id);
 
             if !was_completed {
@@ -392,10 +472,11 @@ impl App {
 
     pub fn delete_selected_task(&mut self) {
         if let Some(task) = self.selected_task_data() {
-            let id = task.id.clone();
-            self.db.delete_task(&id);
+            let snapshot = task.clone();
+            self.db.delete_task(&snapshot.id);
+            self.push_undo(UndoAction::DeleteTask(snapshot));
             self.expanded_task_id = None;
-            self.status_message = Some("Deleted".to_string());
+            self.status_message = Some("Deleted (u to undo)".to_string());
             self.refresh_tasks();
         }
     }
@@ -407,10 +488,11 @@ impl App {
             return;
         }
         if let Some(list) = self.current_list() {
-            let id = list.id.clone();
-            let name = list.name.clone();
-            self.db.delete_list(&id);
-            self.status_message = Some(format!("Deleted list: {}", name));
+            let list_snapshot = list.clone();
+            let tasks_snapshot = self.db.get_tasks_by_list(&list_snapshot.id);
+            self.db.delete_list(&list_snapshot.id);
+            self.push_undo(UndoAction::DeleteList { list: list_snapshot.clone(), tasks: tasks_snapshot });
+            self.status_message = Some(format!("Deleted list: {} (u to undo)", list_snapshot.name));
             self.refresh_lists();
             self.refresh_tasks();
         }

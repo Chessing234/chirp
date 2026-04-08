@@ -206,7 +206,10 @@ fn resolve_hours(hour: u32, period: Option<&str>) -> u32 {
 // === Formatting ===
 
 pub fn format_due_date(timestamp: i64) -> String {
-    let date = Local.timestamp_millis_opt(timestamp).unwrap();
+    let date = match Local.timestamp_millis_opt(timestamp).single() {
+        Some(d) => d,
+        None => return format!("?{}", timestamp),
+    };
     let now = Local::now();
     let tomorrow = now + Duration::days(1);
     let time_str = date.format("%-I:%M %p").to_string();
@@ -303,7 +306,10 @@ pub fn reconstruct_task_input(
 }
 
 fn reconstruct_due_text(timestamp: i64) -> String {
-    let date = Local.timestamp_millis_opt(timestamp).unwrap();
+    let date = match Local.timestamp_millis_opt(timestamp).single() {
+        Some(d) => d,
+        None => return format!("{}", timestamp),
+    };
     let now = Local::now();
     let tomorrow = now + Duration::days(1);
 
@@ -326,7 +332,7 @@ fn reconstruct_due_text(timestamp: i64) -> String {
 
 pub fn next_recurrence_due(current_due: Option<i64>, recurrence: &str) -> Option<i64> {
     let base = if let Some(due) = current_due {
-        Local.timestamp_millis_opt(due).unwrap()
+        Local.timestamp_millis_opt(due).single()?
     } else {
         Local::now()
     };
