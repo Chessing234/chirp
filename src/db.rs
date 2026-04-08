@@ -203,6 +203,25 @@ impl Database {
         ).ok()
     }
 
+    pub fn list_task_counts(&self, list_id: &str) -> (usize, usize) {
+        let total: usize = self.conn.query_row(
+            "SELECT COUNT(*) FROM tasks WHERE list_id=?1", [list_id], |r| r.get(0),
+        ).unwrap_or(0);
+        let pending: usize = self.conn.query_row(
+            "SELECT COUNT(*) FROM tasks WHERE list_id=?1 AND completed=0", [list_id], |r| r.get(0),
+        ).unwrap_or(0);
+        (pending, total)
+    }
+
+    pub fn get_completed_today(&self, start_of_today_ms: i64) -> Vec<Task> {
+        let sql = format!(
+            "SELECT {} FROM tasks WHERE completed=1 AND updated_at >= ?1 ORDER BY updated_at DESC",
+            Self::TASK_COLS
+        );
+        let mut stmt = self.conn.prepare(&sql).unwrap();
+        stmt.query_map([start_of_today_ms], Self::read_task).unwrap().filter_map(|r| r.ok()).collect()
+    }
+
     pub fn create_task(
         &self, list_id: &str, content: &str, due_at: Option<i64>,
         ping_interval: Option<i64>, priority: Option<u8>, recurrence: Option<&str>,

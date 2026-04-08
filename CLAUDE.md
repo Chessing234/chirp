@@ -9,7 +9,7 @@ Chirp is a minimalist TUI task manager written in Rust. It uses ratatui/crosster
 ```
 src/
   main.rs     Entry point, CLI routing, TUI event loop, key handling
-  app.rs      App state, task/list CRUD logic, search, agenda
+  app.rs      App state, task/list CRUD logic, search, agenda, undo stack
   ui.rs       Ratatui rendering (header, tasks, input, keybinds, dialogs)
   db.rs       SQLite schema, migrations, queries (WAL mode for concurrent access)
   parser.rs   Natural language parsing (dates, times, priorities, pings, recurrence)
@@ -21,11 +21,26 @@ src/
 
 ```bash
 cargo build          # debug build
-cargo test           # 25 tests across db, parser, daemon
+cargo test           # 26+ tests across db, parser, daemon
 cargo clippy -- -D warnings   # must pass with zero warnings
 ```
 
 CI runs on macOS, Linux, and Windows. Release builds trigger on `v*` tags.
+
+## CLI subcommands
+
+```
+chirp                    Launch TUI
+chirp --list <name>      Launch TUI into a specific list
+chirp add "text"         Add task from CLI (supports --list, natural language)
+chirp list [--json]      Show all lists with pending/total counts
+chirp done [--json]      Show today's completed tasks
+chirp export             Dump all tasks as JSON to stdout
+chirp --import <file>    Import from JSON/CSV
+chirp daemon start|stop|restart|install|uninstall|status
+```
+
+The `--json` flag works with `list` and `done` for script-friendly output.
 
 ## Key conventions
 
@@ -35,10 +50,13 @@ CI runs on macOS, Linux, and Windows. Release builds trigger on `v*` tags.
 - **Notifications**: use `notify-rust` with a fallback to `notify-send` CLI on Linux if libdbus is missing.
 - **Terminal popup**: on macOS, check `$TERM_PROGRAM` to detect the user's terminal. Only Terminal.app and iTerm2 support AppleScript `do script`; others (Alacritty, Kitty, WezTerm) use `open -a`.
 - **UI style**: minimalist dark theme. Unicode symbols (○/✓/▸), no box borders on main layout, single-line keybind bar at bottom. Colors defined as constants at top of ui.rs.
+- **Undo**: app.rs maintains an undo stack (max 20 entries) for delete task, toggle done, and delete list. Press `u` to undo.
+- **Mouse**: click to select, click checkbox to toggle, scroll wheel navigates. Enabled via crossterm EnableMouseCapture.
 - **Tests**: all tests use `Database::in_memory()` to avoid touching real data. Parser tests are pure functions. Daemon tests use temp PID files and restore state.
 - **Clippy**: must pass `cargo clippy -- -D warnings` before committing.
 - **Commit style**: imperative mood, first line summarizes the change, body explains why.
 - **Release**: `git tag v0.X.0 && git push --tags` triggers cross-platform builds via GitHub Actions.
+- **Crate name**: `chirp-tui` on crates.io (chirp was taken). Binary installs as `chirp` via `[[bin]] name`.
 
 ## Dependencies (keep minimal)
 

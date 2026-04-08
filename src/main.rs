@@ -19,6 +19,7 @@ use std::time::Duration;
 
 fn main() -> io::Result<()> {
     let args: Vec<String> = std::env::args().collect();
+    let json_mode = args.iter().any(|a| a == "--json");
     let sub = args.get(1).map(|s| s.as_str());
 
     match sub {
@@ -42,6 +43,12 @@ fn main() -> io::Result<()> {
         Some("add") => {
             return add_task(&args[2..]);
         }
+        Some("list") => {
+            return list_lists(json_mode);
+        }
+        Some("done") => {
+            return show_done(json_mode);
+        }
         Some("--import") => {
             let path = args.get(2).unwrap_or_else(|| {
                 eprintln!("Usage: chirp --import <file.json|file.csv>");
@@ -57,6 +64,8 @@ fn main() -> io::Result<()> {
             println!("Usage:");
             println!("  chirp [--list <name>]    Launch TUI (optionally into a list)");
             println!("  chirp add \"task text\"    Add task from CLI (supports --list)");
+            println!("  chirp list [--json]      Show all lists with task counts");
+            println!("  chirp done [--json]      Show today's completed tasks");
             println!("  chirp export             Dump all tasks as JSON to stdout");
             println!("  chirp daemon [cmd]       start|stop|restart|install|uninstall|status");
             println!("  chirp --import <file>    Import from JSON/CSV");
@@ -201,6 +210,68 @@ fn add_task(args: &[String]) -> io::Result<()> {
     );
 
     println!("Added: {}", parsed.content);
+    Ok(())
+}
+
+fn list_lists(json_mode: bool) -> io::Result<()> {
+    let db = db::Database::new().map_err(|e| io::Error::other(e.to_string()))?;
+    let lists = db.get_all_lists();
+
+    if json_mode {
+        let out: Vec<serde_json::Value> = lists.iter().map(|list| {
+            let (pending, total) = db.list_task_counts(&list.id);
+            serde_json::json!({
+                "name": list.name,
+                "pending": pending,
+                "total": total,
+            })
+        }).collect();
+        println!("{}", serde_json::to_string_pretty(&out).unwrap());
+    } else {
+        for list in &lists {
+            let (pending, total) = db.list_task_counts(&list.id);
+            println!("  {} ({}/{})", list.name, pending, total);
+        }
+    }
+    Ok(())
+}
+
+fn show_done(json_mode: bool) -> io::Result<()> {
+    let db = db::Database::new().map_err(|e| io::Error::other(e.to_string()))?;
+    let lists = db.get_all_lists();
+
+    let now = chrono::Local::now();
+    let start_of_today = now.date_naive()
+        .and_hms_opt(0, 0, 0)
+        .map(|dt| chrono::Local.from_local_datetime(&dt).unwrap().timestamp_millis())
+        .unwrap_or(0);
+
+    let tasks = db.get_completed_today(start_of_today);
+
+    if json_mode {
+        let out: Vec<serde_json::Value> = tasks.iter().map(|task| {
+            let list_name = lists.iter()
+                .find(|l| l.id == task.list_id)
+                .map(|l| l.name.as_str())
+                .unwrap_or("?");
+            serde_json::json!({
+                "content": task.content,
+                "list": list_name,
+            })
+        }).collect();
+        println!("{}", serde_json::to_string_pretty(&out).unwrap());
+    } else if tasks.is_empty() {
+        println!("  nothing completed today");
+    } else {
+        println!("  completed today ({}):", tasks.len());
+        for task in &tasks {
+            let list_name = lists.iter()
+                .find(|l| l.id == task.list_id)
+                .map(|l| l.name.as_str())
+                .unwrap_or("?");
+            println!("  \u{2713} {}  [{}]", task.content, list_name);
+        }
+    }
     Ok(())
 }
 
