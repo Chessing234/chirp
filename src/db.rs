@@ -448,4 +448,66 @@ mod tests {
         assert_eq!(tasks[2].content, "low");
         assert_eq!(tasks[3].content, "none");
     }
+
+    #[test]
+    fn test_export_all_tasks() {
+        let db = test_db();
+        let lists = db.get_all_lists();
+        let inbox_id = &lists[0].id;
+
+        let work = db.create_list("Work");
+        db.create_task(inbox_id, "buy milk", Some(1000), Some(30), Some(2), Some("daily"));
+        db.create_task(&work.id, "standup", None, None, Some(1), None);
+        db.create_task(inbox_id, "plain task", None, None, None, None);
+
+        let all = db.get_all_tasks();
+        assert_eq!(all.len(), 3);
+
+        // Verify fields are populated correctly
+        let milk = all.iter().find(|t| t.content == "buy milk").unwrap();
+        assert_eq!(milk.due_at, Some(1000));
+        assert_eq!(milk.ping_interval, Some(30));
+        assert_eq!(milk.priority, Some(2));
+        assert_eq!(milk.recurrence.as_deref(), Some("daily"));
+        assert_eq!(milk.list_id, *inbox_id);
+
+        let standup = all.iter().find(|t| t.content == "standup").unwrap();
+        assert_eq!(standup.priority, Some(1));
+        assert_eq!(standup.list_id, work.id);
+
+        let plain = all.iter().find(|t| t.content == "plain task").unwrap();
+        assert!(plain.due_at.is_none());
+        assert!(plain.ping_interval.is_none());
+        assert!(plain.priority.is_none());
+        assert!(plain.recurrence.is_none());
+
+        // Verify JSON serialization round-trip
+        let list_map: std::collections::HashMap<String, String> = db.get_all_lists()
+            .into_iter().map(|l| (l.id.clone(), l.name)).collect();
+
+        let json_tasks: Vec<serde_json::Value> = all.iter().map(|task| {
+            let mut obj = serde_json::json!({
+                "content": task.content,
+                "list": list_map.get(&task.list_id).unwrap(),
+                "completed": task.completed,
+            });
+            if let Some(p) = task.priority { obj["priority"] = serde_json::json!(p); }
+            if let Some(due) = task.due_at { obj["due_at"] = serde_json::json!(due); }
+            if let Some(ping) = task.ping_interval { obj["ping"] = serde_json::json!(ping); }
+            if let Some(ref rec) = task.recurrence { obj["recurrence"] = serde_json::json!(rec); }
+            obj
+        }).collect();
+
+        let json_str = serde_json::to_string(&json_tasks).unwrap();
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&json_str).unwrap();
+        assert_eq!(parsed.len(), 3);
+
+        let milk_json = parsed.iter().find(|v| v["content"] == "buy milk").unwrap();
+        assert_eq!(milk_json["list"], "Inbox");
+        assert_eq!(milk_json["priority"], 2);
+        assert_eq!(milk_json["due_at"], 1000);
+        assert_eq!(milk_json["ping"], 30);
+        assert_eq!(milk_json["recurrence"], "daily");
+        assert_eq!(milk_json["completed"], false);
+    }
 }

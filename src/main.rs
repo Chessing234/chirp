@@ -39,6 +39,9 @@ fn main() -> io::Result<()> {
         Some("export") => {
             return export_tasks();
         }
+        Some("add") => {
+            return add_task(&args[2..]);
+        }
         Some("--import") => {
             let path = args.get(2).unwrap_or_else(|| {
                 eprintln!("Usage: chirp --import <file.json|file.csv>");
@@ -53,6 +56,7 @@ fn main() -> io::Result<()> {
             println!("chirp - minimalist task manager\n");
             println!("Usage:");
             println!("  chirp [--list <name>]    Launch TUI (optionally into a list)");
+            println!("  chirp add \"task text\"    Add task from CLI (supports --list)");
             println!("  chirp export             Dump all tasks as JSON to stdout");
             println!("  chirp daemon [cmd]       start|stop|restart|install|uninstall|status");
             println!("  chirp --import <file>    Import from JSON/CSV");
@@ -150,6 +154,53 @@ fn export_tasks() -> io::Result<()> {
     }
 
     println!("{}", serde_json::to_string_pretty(&out).unwrap());
+    Ok(())
+}
+
+fn add_task(args: &[String]) -> io::Result<()> {
+    let db = db::Database::new().map_err(|e| io::Error::other(e.to_string()))?;
+
+    // Parse --list flag and collect remaining text
+    let mut list_name: Option<String> = None;
+    let mut text_parts: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        if args[i] == "--list" {
+            if let Some(name) = args.get(i + 1) {
+                list_name = Some(name.clone());
+                i += 2;
+                continue;
+            } else {
+                eprintln!("--list requires a name");
+                std::process::exit(1);
+            }
+        }
+        text_parts.push(args[i].clone());
+        i += 1;
+    }
+
+    let text = text_parts.join(" ");
+    if text.is_empty() {
+        eprintln!("Usage: chirp add \"task text\" [--list <name>]");
+        std::process::exit(1);
+    }
+
+    let list_id = if let Some(name) = list_name {
+        db.find_or_create_list(&name)
+    } else {
+        let lists = db.get_all_lists();
+        lists.first().map(|l| l.id.clone()).unwrap_or_else(|| {
+            db.create_list("Inbox").id
+        })
+    };
+
+    let parsed = parser::parse_task_input(&text);
+    db.create_task(
+        &list_id, &parsed.content, parsed.due_at, parsed.ping_interval,
+        parsed.priority, parsed.recurrence.as_deref(),
+    );
+
+    println!("Added: {}", parsed.content);
     Ok(())
 }
 
@@ -314,6 +365,7 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
             }
         }
         KeyCode::Char('D') => { app.view = View::ConfirmDeleteList; }
+        KeyCode::Char('u') => app.undo(),
 
         _ => {}
     }
