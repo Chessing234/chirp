@@ -18,21 +18,19 @@ use std::time::Duration;
 
 fn main() -> io::Result<()> {
     let args: Vec<String> = std::env::args().collect();
-
-    // Subcommand routing
     let sub = args.get(1).map(|s| s.as_str());
 
     match sub {
         Some("daemon") => {
-            let sub2 = args.get(2).map(|s| s.as_str());
-            match sub2 {
+            match args.get(2).map(|s| s.as_str()) {
                 None | Some("start") => { daemon::run(); return Ok(()); }
+                Some("stop") => { daemon::stop(); return Ok(()); }
+                Some("restart") => { daemon::restart(); return Ok(()); }
                 Some("install") => { daemon::install(); return Ok(()); }
                 Some("uninstall") => { daemon::uninstall(); return Ok(()); }
                 Some("status") => { daemon::status(); return Ok(()); }
                 Some(other) => {
-                    eprintln!("Unknown daemon command: {}", other);
-                    eprintln!("Usage: chirp daemon [start|install|uninstall|status]");
+                    eprintln!("Unknown: chirp daemon {}", other);
                     std::process::exit(1);
                 }
             }
@@ -43,32 +41,29 @@ fn main() -> io::Result<()> {
                 std::process::exit(1);
             });
             match import::import_file(path) {
-                Ok(count) => { println!("Imported {} tasks from {}", count, path); return Ok(()); }
+                Ok(n) => { println!("Imported {} tasks", n); return Ok(()); }
                 Err(e) => { eprintln!("Import failed: {}", e); std::process::exit(1); }
             }
         }
         Some("--help") | Some("-h") => {
-            println!("chirp - keyboard-first task manager for the terminal\n");
+            println!("chirp - minimalist task manager\n");
             println!("Usage:");
-            println!("  chirp                         Launch the TUI");
-            println!("  chirp daemon                  Run reminder daemon (foreground)");
-            println!("  chirp daemon install           Auto-start daemon on login");
-            println!("  chirp daemon uninstall         Remove auto-start");
-            println!("  chirp daemon status            Check if daemon is running");
-            println!("  chirp --import <file>          Import tasks from JSON or CSV");
-            println!("\nThe daemon sends desktop notifications for ping reminders even");
-            println!("when the TUI is closed. Install it to keep reminders running 24/7.");
+            println!("  chirp                    Launch TUI");
+            println!("  chirp daemon [cmd]       start|stop|restart|install|uninstall|status");
+            println!("  chirp --import <file>    Import from JSON/CSV");
             return Ok(());
         }
-        _ => {} // fall through to TUI
+        _ => {}
     }
 
-    // Install panic hook to restore terminal on crash
+    // Auto-install daemon for persistent pings
+    daemon::auto_install();
+
     let original_hook = panic::take_hook();
-    panic::set_hook(Box::new(move |panic_info| {
+    panic::set_hook(Box::new(move |info| {
         let _ = disable_raw_mode();
         let _ = execute!(io::stdout(), LeaveAlternateScreen);
-        original_hook(panic_info);
+        original_hook(info);
     }));
 
     enable_raw_mode()?;
@@ -97,16 +92,10 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<
 
         if event::poll(Duration::from_millis(50))? {
             if let Event::Key(key) = event::read()? {
-                if key.kind != event::KeyEventKind::Press {
-                    continue;
-                }
-
+                if key.kind != event::KeyEventKind::Press { continue; }
                 app.status_message = None;
                 handle_key(app, key);
-
-                if app.should_quit {
-                    return Ok(());
-                }
+                if app.should_quit { return Ok(()); }
             }
         }
     }
@@ -131,23 +120,22 @@ fn handle_key(app: &mut App, key: KeyEvent) {
             _ => app.view = View::Tasks,
         },
         View::Help => { app.view = View::Tasks; }
-        View::NewList | View::RenameList => handle_dialog_input(app, key),
+        View::NewList | View::RenameList => handle_dialog(app, key),
         View::Tasks => {
             if app.input_mode == InputMode::Insert {
-                handle_insert_mode(app, key);
+                handle_insert(app, key);
             } else {
-                handle_normal_mode(app, key);
+                handle_normal(app, key);
             }
         }
     }
 }
 
-fn handle_normal_mode(app: &mut App, key: KeyEvent) {
+fn handle_normal(app: &mut App, key: KeyEvent) {
     match key.code {
         KeyCode::Char('q') | KeyCode::Esc => app.should_quit = true,
         KeyCode::Char('?') => app.view = View::Help,
 
-        // Navigation
         KeyCode::Char('j') | KeyCode::Down => app.move_selection_down(),
         KeyCode::Char('k') | KeyCode::Up => app.move_selection_up(),
         KeyCode::Char('g') => app.move_selection_top(),
@@ -159,11 +147,9 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
         KeyCode::Char('[') => app.cycle_list(false),
         KeyCode::Char('t') => app.toggle_today(),
 
-        // Reorder tasks (Shift+J / Shift+K)
         KeyCode::Char('J') => app.move_task_down(),
         KeyCode::Char('K') => app.move_task_up(),
 
-        // Task actions
         KeyCode::Char('i') | KeyCode::Char('a') => {
             app.input_mode = InputMode::Insert;
             app.search_mode = false;
@@ -184,14 +170,13 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
         KeyCode::Char('c') => {
             app.show_completed = !app.show_completed;
             app.status_message = Some(if app.show_completed {
-                "Showing completed".to_string()
+                "showing completed".into()
             } else {
-                "Hiding completed".to_string()
+                "hiding completed".into()
             });
             app.clamp_selection();
         }
 
-        // List actions
         KeyCode::Char('n') => {
             app.view = View::NewList;
             app.input_mode = InputMode::Insert;
@@ -212,14 +197,12 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
     }
 }
 
-fn handle_insert_mode(app: &mut App, key: KeyEvent) {
+fn handle_insert(app: &mut App, key: KeyEvent) {
     match (key.modifiers, key.code) {
         (_, KeyCode::Esc) => {
-            if app.search_mode {
-                app.cancel_search();
-            } else if app.editing_task_id.is_some() {
-                app.cancel_edit();
-            } else {
+            if app.search_mode { app.cancel_search(); }
+            else if app.editing_task_id.is_some() { app.cancel_edit(); }
+            else {
                 app.input_mode = InputMode::Normal;
                 app.input.clear();
                 app.cursor_pos = 0;
@@ -227,9 +210,7 @@ fn handle_insert_mode(app: &mut App, key: KeyEvent) {
         }
         (_, KeyCode::Enter) => {
             app.submit_input();
-            if !app.search_mode {
-                app.input_mode = InputMode::Normal;
-            }
+            if !app.search_mode { app.input_mode = InputMode::Normal; }
         }
         (_, KeyCode::Backspace) => app.delete_char_before_cursor(),
         (_, KeyCode::Delete) => app.delete_char_at_cursor(),
@@ -256,7 +237,7 @@ fn handle_insert_mode(app: &mut App, key: KeyEvent) {
     }
 }
 
-fn handle_dialog_input(app: &mut App, key: KeyEvent) {
+fn handle_dialog(app: &mut App, key: KeyEvent) {
     match key.code {
         KeyCode::Esc => {
             app.input.clear();

@@ -32,7 +32,8 @@ pub fn parse_task_input(input: &str) -> ParsedTask {
     }
 
     // Time patterns (order matters - more specific first)
-    let patterns: Vec<(Regex, Box<dyn Fn(&regex::Captures) -> i64>)> = vec![
+    type PatternHandler = Vec<(Regex, Box<dyn Fn(&regex::Captures) -> i64>)>;
+    let patterns: PatternHandler = vec![
         // "tomorrow 5pm" or "tomorrow 5:30pm"
         (
             Regex::new(r"(?i)\btomorrow\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b").unwrap(),

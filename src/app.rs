@@ -376,7 +376,7 @@ impl App {
                         let next_due = parser::next_recurrence_due(due_at, rec);
                         self.db.create_task(&list_id, &content, next_due, ping_interval, priority, Some(rec));
                         let due_text = next_due
-                            .map(|d| parser::format_due_date(d))
+                            .map(parser::format_due_date)
                             .unwrap_or_else(|| "soon".to_string());
                         self.status_message = Some(format!("Done! Next: {}", due_text));
                     }
@@ -421,7 +421,7 @@ impl App {
         if let Some(task) = self.selected_task_data() {
             if task.ping_interval.is_some() {
                 let id = task.id.clone();
-                let interval_text = task.ping_interval.map(|i| parser::format_ping_interval(i)).unwrap_or_default();
+                let interval_text = task.ping_interval.map(parser::format_ping_interval).unwrap_or_default();
                 self.db.snooze_task(&id);
                 self.status_message = Some(format!("Snoozed for {}", interval_text));
                 self.refresh_tasks();

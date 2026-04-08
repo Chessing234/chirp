@@ -4,9 +4,16 @@ use std::path::PathBuf;
 use uuid::Uuid;
 
 pub fn data_dir() -> PathBuf {
-    dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("Chirp")
+    // macOS: ~/Library/Application Support/Chirp
+    // Linux: ~/.local/share/Chirp (or $XDG_DATA_HOME/Chirp)
+    // Windows: %APPDATA%\Chirp
+    #[cfg(target_os = "windows")]
+    let base = dirs::config_dir(); // %APPDATA% on Windows
+
+    #[cfg(not(target_os = "windows"))]
+    let base = dirs::data_dir();
+
+    base.unwrap_or_else(|| PathBuf::from(".")).join("Chirp")
 }
 
 pub struct Database {
