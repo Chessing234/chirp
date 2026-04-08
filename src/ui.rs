@@ -44,6 +44,8 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
 
     draw_header(frame, app, chunks[0]);
     frame.render_widget(Paragraph::new("").style(Style::default().bg(BG)), chunks[1]);
+    app.task_area_y = chunks[2].y;
+    app.task_area_height = chunks[2].height;
     draw_tasks(frame, app, chunks[2]);
     if detail_h > 0 { draw_detail(frame, app, chunks[3]); }
     frame.render_widget(Paragraph::new(Line::from(Span::styled(

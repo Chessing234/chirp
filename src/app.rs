@@ -43,6 +43,9 @@ pub struct App {
     pub should_quit: bool,
     pub status_message: Option<String>,
     pub daemon_running: bool,
+    // Layout info for mouse support
+    pub task_area_y: u16,
+    pub task_area_height: u16,
     // Agenda
     pub agenda_due_count: usize,
     pub agenda_next: Option<(String, i64)>,
@@ -76,6 +79,8 @@ impl App {
             should_quit: false,
             status_message: None,
             daemon_running: daemon::is_running(),
+            task_area_y: 2,
+            task_area_height: 0,
             agenda_due_count: 0,
             agenda_next: None,
             matcher: SkimMatcherV2::default(),
@@ -84,6 +89,15 @@ impl App {
         };
         app.refresh_agenda();
         app
+    }
+
+    pub fn select_list_by_name(&mut self, name: &str) {
+        let lower = name.to_lowercase();
+        if let Some(idx) = self.lists.iter().position(|l| l.name.to_lowercase() == lower) {
+            self.selected_list = idx;
+            self.viewing_today = false;
+            self.refresh_tasks();
+        }
     }
 
     pub fn current_list(&self) -> Option<&List> {

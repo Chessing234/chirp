@@ -162,6 +162,15 @@ impl Database {
         ).unwrap_or(-1)
     }
 
+    pub fn get_all_tasks(&self) -> Vec<Task> {
+        let sql = format!(
+            "SELECT {} FROM tasks ORDER BY list_id, completed ASC, COALESCE(priority,4) ASC, sort_order ASC",
+            Self::TASK_COLS
+        );
+        let mut stmt = self.conn.prepare(&sql).unwrap();
+        stmt.query_map([], Self::read_task).unwrap().filter_map(|r| r.ok()).collect()
+    }
+
     pub fn get_tasks_by_list(&self, list_id: &str) -> Vec<Task> {
         let sql = format!(
             "SELECT {} FROM tasks WHERE list_id=?1 ORDER BY completed ASC, COALESCE(priority,4) ASC, sort_order ASC",
